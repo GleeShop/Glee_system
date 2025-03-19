@@ -1,90 +1,85 @@
+// Importa la configuración de Firebase desde firebase-config.js
 import { db } from "./firebase-config.js";
-import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+import {
+  collection,
+  query,
+  orderBy,
+  where,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-window.applyMenuPermissions = function (userData) {
-  const userRol = (userData.rol || "").toLowerCase();
-  const perms = userData.permissions || {};
+/**
+ * Función para cargar los usuarios desde Firestore y llenar el select.
+ */
+async function loadUsers() {
+  try {
+    const usuariosRef = collection(db, "usuarios");
+    const q = query(usuariosRef, orderBy("username"));
+    const snapshot = await getDocs(q);
 
-  const menuProductos = document.getElementById("menuProductos");
-  const menuEntradas = document.getElementById("menuEntradas");
-  const menuMovimientos = document.getElementById("menuMovimientos");
-  const menuVentas = document.getElementById("menuVentas");
-  const menuUsuarios = document.getElementById("menuUsuarios");
-  const menuTiendas = document.getElementById("menuTiendas");
-  const menuEmpleados = document.getElementById("menuEmpleados");
-
-  if (userRol === "admin") {
-    // Para admin se muestran todas las secciones
-    if (menuProductos) menuProductos.style.display = "inline-block";
-    if (menuEntradas) menuEntradas.style.display = "inline-block";
-    if (menuMovimientos) menuMovimientos.style.display = "inline-block";
-    if (menuVentas) menuVentas.style.display = "inline-block";
-    if (menuUsuarios) menuUsuarios.style.display = "inline-block";
-    if (menuTiendas) menuTiendas.style.display = "inline-block";
-    if (menuEmpleados) menuEmpleados.style.display = "inline-block";
-  } else {
-    // Para usuarios no admin, se asignan los permisos según su objeto
-    // Si no se especifica lo contrario, se muestran las secciones de ventas, tiendas y empleados.
-    if (menuProductos) {
-      if (perms.listaProductos && perms.listaProductos.habilitado) {
-        menuProductos.style.display = "inline-block";
-      } else {
-        menuProductos.style.display = "none";
-      }
-    }
-    if (menuEntradas) {
-      menuEntradas.style.display = perms.entradas ? "inline-block" : "none";
-    }
-    if (menuMovimientos) {
-      menuMovimientos.style.display = perms.movimientos ? "inline-block" : "none";
-    }
-    if (menuVentas) {
-      // Asumimos que si no está en false, el usuario puede ver ventas
-      menuVentas.style.display = (perms.ventasGenerales !== false) ? "inline-block" : "none";
-    }
-    if (menuUsuarios) {
-      menuUsuarios.style.display = perms.usuarios ? "inline-block" : "none";
-    }
-    if (menuTiendas) {
-      // Mostrar tiendas de vista si no se desactiva
-      menuTiendas.style.display = (perms.tiendas !== false) ? "inline-block" : "none";
-    }
-    if (menuEmpleados) {
-      // Mostrar empleados por defecto
-      menuEmpleados.style.display = (perms.empleados !== false) ? "inline-block" : "none";
-    }
+    const userSelect = document.getElementById("userSelect");
+    userSelect.innerHTML = "";
+    snapshot.forEach((docSnap) => {
+      const user = docSnap.data();
+      // Se asume que el campo 'username' existe en cada documento
+      const option = document.createElement("option");
+      option.value = user.username;
+      option.textContent = user.username;
+      userSelect.appendChild(option);
+    });
+  } catch (error) {
+    console.error("Error al cargar usuarios:", error);
+    Swal.fire("Error", "Error al cargar usuarios: " + error.message, "error");
   }
-};
+}
 
-      window.logout = function () {
-        localStorage.removeItem("loggedUser");
-        window.location.href = "login.html";
-      };
+/**
+ * Función para manejar el login.
+ */
+async function handleLogin() {
+  const selectedUser = document.getElementById("userSelect").value;
+  const passwordInput = document.getElementById("passwordInput").value;
 
-      document.addEventListener("DOMContentLoaded", async function () {
-        const loggedUser = localStorage.getItem("loggedUser");
-        if (!loggedUser) {
-          window.location.href = "login.html";
-        } else {
-          document.getElementById("loggedUser").innerHTML = `<i class="fa-solid fa-user"></i> ${loggedUser}`;
-          const usuariosRef = collection(db, "usuarios");
-          const q = query(usuariosRef, where("username", "==", loggedUser));
-          try {
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-              querySnapshot.forEach((doc) => {
-                const userData = doc.data();
-                if (userData.tienda) {
-                  document.getElementById("userStore").textContent = userData.tienda;
-                }
-                window.applyMenuPermissions(userData);
-              });
-            } else {
-              localStorage.removeItem("loggedUser");
-              window.location.href = "login.html";
-            }
-          } catch (error) {
-            console.error("Error fetching user data:", error);
-          }
-        }
-      });
+  try {
+    const usuariosRef = collection(db, "usuarios");
+    const q = query(usuariosRef, where("username", "==", selectedUser));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      Swal.fire("Error", "Usuario no encontrado.", "error");
+      return;
+    }
+
+    let userData;
+    querySnapshot.forEach((docSnap) => {
+      userData = docSnap.data();
+    });
+
+    if (!userData) {
+      Swal.fire("Error", "Usuario no encontrado.", "error");
+      return;
+    }
+
+    if (userData.password !== passwordInput) {
+      Swal.fire("Error", "Contraseña incorrecta.", "error");
+      return;
+    }
+
+    // Login exitoso: guardar datos en localStorage
+    localStorage.setItem("loggedUser", userData.username);
+    localStorage.setItem("loggedUserRole", userData.rol || "");
+    localStorage.setItem("loggedUserStore", userData.tienda || "");
+
+    // Redirigir a la página principal (index.html)
+    window.location.href = "home.html";
+  } catch (error) {
+    console.error("Error en login:", error);
+    Swal.fire("Error", "Error en login: " + error.message, "error");
+  }
+}
+
+// Al cargar la página, cargar la lista de usuarios y asignar eventos
+document.addEventListener("DOMContentLoaded", () => {
+  loadUsers();
+  document.getElementById("btnLogin").addEventListener("click", handleLogin);
+});

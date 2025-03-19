@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glee</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Font Awesome para íconos -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <!-- Favicon: GLEED.PNG -->
+    <link rel="icon" type="image/png" href="GLEED.PNG" />
+    <!-- Archivo CSS externo -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Menú lateral fijo -->
+    <nav id="sidebar">
+      <div>
+        <!-- Imagen superior -->
+        <div class="text-center mb-4">
+          <img src="img\GLEED2.png" alt="GLEED" class="img-fluid" style="max-width: 150px;">
+        </div>
+        <ul>
+          <li id="menuProductos">
+            <a href="listaProductos.html" target="contentFrame">
+              <img src="img\agregar-producto.png" alt="Agregar Producto" class="menu-icon" />
+              Productos
+            </a>
+          </li>
+          <li id="menuEntradas">
+            <a
+              class="dropdown-toggle"
+              href="#"
+              data-bs-toggle="collapse"
+              data-bs-target="#submenuEntradas"
+              aria-expanded="false"
+            >
+              <img src="img\entradaproducto.png" alt="Agregar Producto" class="menu-icon" />
+              Entradas
+            </a>
+            <ul class="collapse submenu" id="submenuEntradas">
+              <li>
+                <a href="entradaMercaderia.html" target="contentFrame">
+                  <img src="img\nuevo.png" alt="Agregar Producto" class="menu-icon" />
+                  Entrada Mercadería
+                </a>
+              </li>
+              <li>
+                <a href="traslados.html" target="contentFrame">
+                  <img src="img\camion-de-carga.png" alt="Agregar Producto" class="menu-icon" />
+                  Traslados
+                </a>
+              </li>
+              <li>
+                <a href="devolucion.html" target="contentFrame">
+                  <img src="img\transferir.png" alt="Agregar Producto" class="menu-icon" />
+                  Devolución
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li id="menuMovimientos">
+            <a
+              class="dropdown-toggle"
+              href="#"
+              data-bs-toggle="collapse"
+              data-bs-target="#submenuMovimientos"
+              aria-expanded="false"
+            >
+              <img src="img\traslados.png" alt="Agregar Producto" class="menu-icon" />
+              Movimientos
+            </a>
+            <ul class="collapse submenu" id="submenuMovimientos">
+              <li>
+                <a href="realizarMovimiento.html" target="contentFrame">
+                  <img src="img\Movimiento.png" alt="Agregar Producto" class="menu-icon" />
+                  Realizar Movimiento
+                </a>
+              </li>
+              <li>
+                <a href="historiasMovimientos.html" target="contentFrame">
+                  <img src="img\historial1.png" alt="Agregar Producto" class="menu-icon" />
+                  Historias de Movimientos
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li id="menuVentas">
+            <a
+              class="dropdown-toggle"
+              href="#"
+              data-bs-toggle="collapse"
+              data-bs-target="#submenuVentas"
+              aria-expanded="false"
+            >
+              <img src="img\ventas.png" alt="Agregar Producto" class="menu-icon" />
+              Ventas
+            </a>
+            <ul class="collapse submenu" id="submenuVentas">
+              <li>
+                <a href="ventas.html" target="contentFrame">
+                  <img src="img\carro.png" alt="Agregar Producto" class="menu-icon" />
+                  Ventas
+                </a>
+              </li>
+              <li>
+                <a href="preventa.html" target="contentFrame">
+                  <img src="img\preventa.png" alt="Agregar Producto" class="menu-icon" />
+                  Preventas
+                </a>
+              </li>
+              <li>
+                <a href="historialVentas.html" target="contentFrame">
+                  <img src="img\historial.png" alt="Agregar Producto" class="menu-icon" />
+                  Ventas Historial
+                </a>
+              </li>
+              <li>
+                <a href="historialCierre.html" target="contentFrame">
+                  <img src="img\cierre.png" alt="Agregar Producto" class="menu-icon" />
+                  Cierre
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li id="menuEmpleados">
+            <a href="empleados.html" target="contentFrame">
+              <img src="img\vendedor.png" alt="Agregar Producto" class="menu-icon" />
+              Vendedores
+            </a>
+          </li>
+          <li id="menuUsuarios">
+            <a href="usuarios.html" target="contentFrame">
+              <i class="fa-solid fa-user menu-icon"></i> Usuarios
+            </a>
+          </li>
+          <li id="menuTiendas">
+            <a href="tiendas.html" target="contentFrame">
+              <i class="fa-solid fa-store menu-icon"></i> Tiendas
+            </a>
+          </li>
+        </ul>
+      </div>
+      <!-- Bloque de información del usuario al final del menú -->
+      <div class="user-info">
+        <span id="loggedUser"></span>
+        <span id="userStore"></span>
+        <button class="logout-btn" onclick="logout()" title="Cerrar sesión">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Contenedor principal -->
+    <div id="content">
+      <iframe id="contentFrame" name="contentFrame" src="listaProductos.html"></iframe>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Script funcional -->
+    <script type="module" src="home.js"></script>
+  </body>
+</html>
