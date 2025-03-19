@@ -163,13 +163,13 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   let preventas = 0;
   let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
   
-  // Tabla de Ventas Realizadas: muestra ID Venta, Método de Pago, Número de Referencia, Vendedor y Total.
+  // Tabla de Ventas Realizadas: muestra ID Venta, Método de Pago, Número de Referencia, Empleado y Total.
   let ventasRows = ventasDetalle.map(venta => {
     return `<tr>
               <td>${venta.idVenta}</td>
               <td>${venta.metodo_pago}</td>
               <td>${venta.numeroTransferencia || ''}</td>
-              <td>${venta.usuario || ''}</td>
+              <td>${venta.empleadoNombre || ''}</td>
               <td>Q ${Number(venta.total || 0).toFixed(2)}</td>
             </tr>`;
   }).join('');
