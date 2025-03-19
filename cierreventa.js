@@ -84,9 +84,10 @@ export async function cerrarCaja() {
     }
   });
 
+  // Aseguramos que los valores sean numéricos
   let montoApertura = Number(window.montoApertura) || 0;
-  let totalEfectivoSistema = montoApertura + totalEfectivo;
-  let diferencia = montoFinal - totalEfectivoSistema;
+  let totalEfectivoSistema = montoApertura + Number(totalEfectivo);
+  let diferencia = Number(montoFinal) - totalEfectivoSistema;
 
   let now = new Date();
   let horaCierre = now.toTimeString().split(" ")[0];
@@ -96,15 +97,14 @@ export async function cerrarCaja() {
     idhistorialCierre,
     fechaCierre: fechaHoy,
     horaCierre,
-    montoApertura,
-    totalEfectivo,
-    totalTarjeta,
-    totalTransferencia,
-    ventaLinea,
-    totalEfectivo,
-    totalEfectivoSistema,
-    totalIngresado: montoFinal,
-    diferencia,
+    montoApertura: Number(montoApertura) || 0,
+    totalEfectivo: Number(totalEfectivo) || 0,
+    totalTarjeta: Number(totalTarjeta) || 0,
+    totalTransferencia: Number(totalTransferencia) || 0,
+    ventaLinea: Number(ventaLinea) || 0,
+    totalEfectivoSistema: totalEfectivoSistema,
+    totalIngresado: Number(montoFinal) || 0,
+    diferencia: diferencia,
     usuario: localStorage.getItem("loggedUser") || "admin"
   };
 
@@ -135,7 +135,7 @@ export async function cerrarCaja() {
     title: "Cierre Registrado",
     html: `<p>Se ha cerrado la caja correctamente.</p>
            <p>Total Efectivo Sistema: Q ${totalEfectivoSistema.toFixed(2)}</p>
-           <p>Total Ingresado: Q ${montoFinal.toFixed(2)}</p>
+           <p>Total Ingresado: Q ${Number(montoFinal).toFixed(2)}</p>
            <p>Diferencia: Q ${diferencia.toFixed(2)}</p>`,
     icon: "success"
   });
@@ -147,15 +147,15 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
-  // Asumiendo que window.montoApertura fue asignado en aperturacaja.js
+  // Se asegura que los valores sean numéricos
   let montoApertura = Number(window.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
   let totalTransferencia = Number(cierreData.totalTransferencia || 0);
   let ventaLinea = Number(cierreData.ventaLinea || 0);
   let totalIngresado = Number(cierreData.totalIngresado || 0);
-  let totalEfectivoSistema = montoApertura + Number(cierreData.totalEfectivo);
-  let diferencia = Number(cierreData.totalIngresado) - totalEfectivoSistema;
+  let totalEfectivoSistema = montoApertura + Number(cierreData.totalEfectivo || 0);
+  let diferencia = Number(cierreData.totalIngresado || 0) - totalEfectivoSistema;
   let diferenciaColor = diferencia >= 0 ? "green" : "red";
   
   // Para Detalle de Ventas: se usan los valores existentes; si no cuentas con envíos y preventas, se asignan 0.
@@ -163,13 +163,14 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   let preventas = 0;
   let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
   
-  // Tabla de Ventas Realizadas: muestra ID Venta, Método de Pago, Número de Referencia y Total.
+  // Tabla de Ventas Realizadas: muestra ID Venta, Método de Pago, Número de Referencia, Vendedor y Total.
   let ventasRows = ventasDetalle.map(venta => {
     return `<tr>
               <td>${venta.idVenta}</td>
               <td>${venta.metodo_pago}</td>
               <td>${venta.numeroTransferencia || ''}</td>
-              <td>Q ${Number(venta.total).toFixed(2)}</td>
+              <td>${venta.usuario || ''}</td>
+              <td>Q ${Number(venta.total || 0).toFixed(2)}</td>
             </tr>`;
   }).join('');
   
@@ -217,7 +218,6 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
             <td>Q ${preventas.toFixed(2)}</td>
             <td>Q ${totalVentasDetalle.toFixed(2)}</td>
           </tr>
-
         </table>
       </div>
       
@@ -251,6 +251,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
               <th>ID Venta</th>
               <th>Método de Pago</th>
               <th>Número de Referencia</th>
+              <th>Vendedor</th>
               <th>Total</th>
             </tr>
           </thead>
