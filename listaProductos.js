@@ -368,7 +368,7 @@ function getCurrentStock(product, store = currentStore) {
 async function cargarConCadenaTexto() {
   const { value: textData } = await Swal.fire({
     title: "Cargar Productos en Masa",
-    html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Ingresa los productos en formato CSV:&#10;Código,Descripción,Talla,Precio,Stock (opcional)"></textarea>`,
+    html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Ingresa los productos en formato CSV:&#10;Código,Descripción,Talla,Precio,Color,Stock (opcional)"></textarea>`,
     focusConfirm: false,
     preConfirm: () => {
       const text = document.getElementById("swal-textarea").value.trim();
@@ -386,22 +386,23 @@ async function cargarConCadenaTexto() {
   let productosNuevos = [];
   lines.forEach(line => {
     const parts = line.split(",").map(item => item.trim());
-    if (parts.length < 4) {
-      // Se requieren al menos 4 campos: Código, Descripción, Talla, Precio
+    if (parts.length < 5) {
+      // Se requieren al menos 5 campos: Código, Descripción, Talla, Precio, Color
       return;
     }
     const codigo = parts[0];
     const descripcion = parts[1];
     const talla = parts[2];
     const precio = parseFloat(parts[3]);
-    if (!codigo || !descripcion || isNaN(precio) || precio <= 0) {
+    const color = parts[4];
+    if (!codigo || !descripcion || isNaN(precio) || precio <= 0 || !color) {
       // Si algún dato no es válido, se omite la línea
       return;
     }
     // Stock es opcional; si se incluye, se asigna al inventario de la tienda del usuario
     let stock = {};
-    if (parts.length >= 5) {
-      const s = parseInt(parts[4]);
+    if (parts.length >= 6) {
+      const s = parseInt(parts[5]);
       stock = { [loggedUserStore]: isNaN(s) ? 0 : s };
     }
     const nuevoProducto = {
@@ -409,6 +410,7 @@ async function cargarConCadenaTexto() {
       descripcion,
       talla,
       precio,
+      color, // Se agrega el color
       stock,
       createdAt: new Date().toISOString()
     };
