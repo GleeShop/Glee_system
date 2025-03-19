@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ventas</title>
+  
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" />
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- jQuery (requerido por DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <!-- jsPDF para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row">
+        <!-- Lado Izquierdo: Carrito y Control de Caja -->
+        <div class="col-md-5 border-end">
+          <h2>Carrito de Venta</h2>
+          <table class="table table-sm" id="cartTable">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cant.</th>
+                <th>Precio Unitario (Q)</th>
+                <th>Subtotal (Q)</th>
+                <th>Remover</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <h4>Total: Q <span id="totalVenta">0.00</span></h4>
+          <button class="btn btn-success mt-2" onclick="procesarVenta()">Procesar Venta</button>
+          <hr />
+          <!-- Apertura y Cierre de Caja -->
+          <button class="btn btn-warning mt-2" onclick="abrirCaja()">Abrir Caja</button>
+          <button class="btn btn-danger mt-2" onclick="cerrarCaja()">Cerrar Caja</button>
+        </div>
+        <!-- Lado Derecho: Productos Disponibles -->
+        <div class="col-md-7">
+          <h2>Productos Disponibles</h2>
+            <label for="storeSelect">Tienda:</label>
+            <select id="storeSelect">
+              <option value="Jalapa">Jalapa</option>
+              <option value="Bodega">Bodega</option>
+              <!-- Agrega más opciones según tus tiendas -->
+            </select>
+
+          <!-- Título del inventario -->
+          <h4 id="inventoryTitle">Inventario</h4>
+          <!-- Buscador de productos -->
+          <div class="filter-group">
+            <input type="text" id="searchInput" class="form-control" placeholder="Buscar por código o descripción" />
+          </div>
+          <!-- Filtro por Talla -->
+          <div class="filter-group">
+            <select id="sizeFilter" class="form-select">
+              <option value="">Todas las tallas</option>
+              <option value="S">S</option>
+              <option value="M">M</option>
+              <option value="L">L</option>
+              <option value="XL">XL</option>
+            </select>
+          </div>
+          <table class="table table-bordered" id="productsTable">
+            <thead class="table-light">
+              <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Talla</th>
+                <th>Precio</th>
+                <th>Stock</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="productsBody">
+              <!-- Los productos se renderizarán dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Incluimos el script de ventas -->
+    <script type="module" src="ventas.js"></script>
+    <script type="module" src="cierreventa.js"></script>
+    <script type="module" src="aperturacaja.js"></script>
+  </body>
+</html>

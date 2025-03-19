@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiendas</title>
+  
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" />
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- jQuery (requerido por DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <!-- jsPDF para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  
+  <body>
+    <div class="container">
+      <h1 class="mb-4">Administración de Tiendas</h1>
+      <button class="btn btn-primary mb-3" onclick="showStoreForm()">Crear Tienda</button>
+      
+      <table class="table table-bordered" id="storesTable">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Dirección</th>
+            <th>Habilitada</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Se cargarán las tiendas dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal para Crear/Editar Tienda -->
+    <div
+      class="modal fade"
+      id="storeModal"
+      tabindex="-1"
+      aria-labelledby="storeModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form id="storeForm">
+            <div class="modal-header">
+              <h5 class="modal-title" id="storeModalLabel">Crear Tienda</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Cerrar"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="storeId" />
+              
+              <div class="mb-3">
+                <label for="storeName" class="form-label">Nombre</label>
+                <input type="text" id="storeName" class="form-control" required />
+              </div>
+              
+              <div class="mb-3">
+                <label for="storeAddress" class="form-label">Dirección</label>
+                <input type="text" id="storeAddress" class="form-control" />
+              </div>
+              
+              <div class="mb-3">
+                <label class="form-label">Habilitada</label>
+                <select id="storeEnabled" class="form-select">
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary">Guardar Tienda</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+     <!-- Bootstrap JS Bundle -->
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+     <!-- Script funcional -->
+    <script type="module" src="tiendas.js"></script>
+ 
+  </body>
+</html>

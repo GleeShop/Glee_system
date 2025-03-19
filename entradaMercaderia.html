@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrada de Mercadería</title>
+  
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" />
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- jQuery (requerido por DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <!-- jsPDF para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+
+  <body>
+    <div class="container my-4">
+      <h1 class="mb-4" id="invoiceTitle">Registro de Facturas - Entrada de Productos</h1>
+
+      <!-- Filtro de tienda (solo para admin) -->
+      <div id="adminStoreFilter" class="mb-3" style="display: none;">
+        <label for="storeSelect" class="form-label">Filtrar Facturas por tienda:</label>
+        <select id="storeSelect" class="form-select">
+          <option value="">Ver todas las facturas (todas las tiendas)</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <button class="btn btn-primary me-2" onclick="showAddInvoiceForm()">Agregar Factura</button>
+        <button class="btn btn-success" onclick="exportInvoicesImage()">Exportar Listado</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped" id="facturasTable">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Fecha</th>
+              <th>Tienda</th>
+              <th>Estado</th>
+              <th>Productos</th>
+              <th>Total Factura</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Se llenará dinámicamente -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Contenedor oculto para exportar listado de facturas como imagen -->
+      <div id="exportFacturasContainer" style="display: none;">
+        <h3 class="text-center">Facturas Registradas</h3>
+        <table class="table table-striped text-center">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Fecha</th>
+              <th>Tienda</th>
+              <th>Estado</th>
+              <th>Productos</th>
+              <th>Total Factura</th>
+            </tr>
+          </thead>
+          <tbody id="exportFacturasBody">
+            <!-- Se llenará dinámicamente -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal para Agregar/Editar Factura -->
+    <div class="modal fade" id="invoiceModal" tabindex="-1" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <form id="invoiceForm" novalidate>
+            <div class="modal-header">
+              <h5 class="modal-title" id="invoiceModalLabel">Agregar Factura</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="invoiceId" />
+              <div class="mb-3">
+                <label for="invoiceNumber" class="form-label">Número de Factura</label>
+                <input type="text" id="invoiceNumber" class="form-control" required />
+                <div class="invalid-feedback">Ingrese el número de factura.</div>
+              </div>
+              <div class="mb-3">
+                <label for="invoiceDate" class="form-label">Fecha de Factura</label>
+                <input type="date" id="invoiceDate" class="form-control" required />
+                <div class="invalid-feedback">Ingrese la fecha.</div>
+              </div>
+              <div class="mb-3">
+                <label for="invoiceStore" class="form-label">Tienda</label>
+                <select id="invoiceStore" class="form-select" required>
+                  <option value="">Seleccione tienda</option>
+                  <!-- Se cargarán las tiendas -->
+                </select>
+                <div class="invalid-feedback">Seleccione la tienda.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Productos de la Factura</label>
+                <table class="table table-bordered" id="invoiceItemsTable">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                      <th>Precio Unitario</th>
+                      <th>Total</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Se agregarán filas dinámicamente -->
+                  </tbody>
+                </table>
+                <button type="button" class="btn btn-secondary" onclick="addInvoiceItem()">Agregar Producto</button>
+              </div>
+              <div class="mb-3">
+                <label for="invoiceOverallTotal" class="form-label">Total Factura</label>
+                <input type="number" id="invoiceOverallTotal" class="form-control" readonly />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+              <button type="button" class="btn btn-primary" onclick="saveInvoice()">Guardar Factura</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para Ver Detalles de Factura y Exportar Comprobante -->
+    <div class="modal fade" id="invoiceDetailsModal" tabindex="-1" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="invoiceDetailsModalLabel">Detalles de Factura</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div id="invoiceDetailsContainer">
+              <p><strong>Número:</strong> <span id="detailInvoiceNumber"></span></p>
+              <p><strong>Fecha:</strong> <span id="detailInvoiceDate"></span></p>
+              <p><strong>Tienda:</strong> <span id="detailInvoiceStore"></span></p>
+              <p><strong>Estado:</strong> <span id="detailInvoiceStatus"></span></p>
+              <table class="table table-bordered">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="detailInvoiceItems">
+                  <!-- Se llenará dinámicamente -->
+                </tbody>
+              </table>
+              <p class="text-end"><strong>Total Factura:</strong> Q. <span id="detailInvoiceOverallTotal"></span></p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-info" onclick="exportInvoiceComprobante()">Exportar Comprobante</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+     <!-- Script funcional -->
+  <script type="module" src="entradaMercaderia.js"></script>
+  </body>
+</html>

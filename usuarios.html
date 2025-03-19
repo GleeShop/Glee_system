@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Administración de Usuarios</title>
+
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- DataTables CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css"
+    />
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- jQuery (requerido por DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <!-- jsPDF para generar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="mb-4">Administración de Usuarios</h1>
+      <!-- Botón para crear usuario -->
+      <button id="btnCrearUsuario" class="btn btn-primary mb-3">
+        Crear Usuario
+      </button>
+      <table class="table table-bordered" id="usersTable">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Contraseña</th>
+            <th>Tienda</th>
+            <th>Rol</th>
+            <th>Habilitado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Se cargarán los usuarios dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal para Crear/Editar Usuario -->
+    <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form id="userForm">
+            <div class="modal-header">
+              <h5 class="modal-title" id="userModalLabel">Crear Usuario</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="userId" />
+              <div class="mb-3">
+                <label for="username" class="form-label">Usuario</label>
+                <input type="text" id="username" class="form-control" required />
+              </div>
+              <!-- Campo de contraseña con toggle -->
+              <div class="mb-3">
+                <label for="password" class="form-label">Contraseña</label>
+                <div class="input-group">
+                  <input type="password" id="password" class="form-control" required />
+                  <span class="input-group-text" id="togglePassword" style="cursor: pointer;">
+                    <i class="fa-solid fa-eye"></i>
+                  </span>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label for="userStore" class="form-label">Tienda</label>
+                <select id="userStore" class="form-select">
+                  <!-- Se cargarán las tiendas -->
+                </select>
+                <small class="form-text text-muted">No aplica si el rol es admin.</small>
+              </div>
+              <div class="mb-3">
+                <label for="userRole" class="form-label">Rol</label>
+                <select id="userRole" class="form-select" required>
+                  <!-- Se cargarán los roles -->
+                </select>
+                <!-- Botón para administrar roles -->
+                <button type="button" id="btnAdministrarRoles" class="btn btn-link">Administrar Roles</button>
+              </div>
+              <!-- Permisos personalizados -->
+              <div class="mb-3">
+                <label class="form-label">Permisos Personalizados</label>
+                <fieldset class="border p-2 mb-2">
+                  <legend class="w-auto mb-0">
+                    <input class="form-check-input" type="checkbox" id="permListaProductos" />
+                    <label class="form-check-label" for="permListaProductos">Lista Productos</label>
+                  </legend>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="permLPCrear" />
+                    <label class="form-check-label" for="permLPCrear">Botón Crear Producto</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="permLPEditar" />
+                    <label class="form-check-label" for="permLPEditar">Botón Editar Producto</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="permLPEliminar" />
+                    <label class="form-check-label" for="permLPEliminar">Botón Eliminar Producto</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="permLPStock" />
+                    <label class="form-check-label" for="permLPStock">Botón Modificar Stock</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="permLPCargarTexto" />
+                    <label class="form-check-label" for="permLPCargarTexto">Botón Cargar con Cadena de Texto</label>
+                  </div>
+                </fieldset>
+                <!-- Permisos de vista (por defecto, se asignan a true y se muestran como checkbox deshabilitados) -->
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" id="permVentasUser" checked disabled />
+                  <label class="form-check-label" for="permVentasUser">Ver Ventas</label>
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" id="permEmpleadosUser" checked disabled />
+                  <label class="form-check-label" for="permEmpleadosUser">Ver Empleados</label>
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" id="permTiendasUser" checked disabled />
+                  <label class="form-check-label" for="permTiendasUser">Ver Tiendas</label>
+                </div>
+                <!-- Otros permisos -->
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permEntradasUser" />
+                  <label class="form-check-label" for="permEntradasUser">Entradas</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permMovimientosUser" />
+                  <label class="form-check-label" for="permMovimientosUser">Movimientos</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permSalidasUser" />
+                  <label class="form-check-label" for="permSalidasUser">Salidas</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permUsuariosUser" />
+                  <label class="form-check-label" for="permUsuariosUser">Usuarios</label>
+                </div>
+                <small class="form-text text-muted">
+                  Estos permisos reemplazan los del rol asignado.
+                </small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Habilitado</label>
+                <select id="userEnabled" class="form-select">
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary">Guardar Usuario</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para Gestión de Roles -->
+    <div class="modal fade" id="roleModal" tabindex="-1" aria-labelledby="roleModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="roleModalLabel">Administrar Roles</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <button id="btnCrearRol" class="btn btn-primary mb-3">
+              Crear Rol
+            </button>
+            <table class="table table-bordered" id="rolesTable">
+              <thead>
+                <tr>
+                  <th>Rol</th>
+                  <th>Permisos</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Se cargarán los roles dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para Crear/Editar Rol -->
+    <div class="modal fade" id="roleEditModal" tabindex="-1" aria-labelledby="roleEditModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form id="roleForm">
+            <div class="modal-header">
+              <h5 class="modal-title" id="roleEditModalLabel">Crear Rol</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="roleId" />
+              <div class="mb-3">
+                <label for="roleName" class="form-label">Nombre del Rol</label>
+                <input type="text" id="roleName" class="form-control" required />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Permisos</label>
+                <!-- Permisos CRUD para roles -->
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permEntradasRole" />
+                  <label class="form-check-label" for="permEntradasRole">
+                    Entradas
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permMovimientosRole" />
+                  <label class="form-check-label" for="permMovimientosRole">
+                    Movimientos
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permSalidasRole" />
+                  <label class="form-check-label" for="permSalidasRole">
+                    Salidas
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permUsuariosRole" />
+                  <label class="form-check-label" for="permUsuariosRole">
+                    Usuarios
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="permTiendasRole" />
+                  <label class="form-check-label" for="permTiendasRole">
+                    Tiendas
+                  </label>
+                </div>
+                <!-- Nota: Los permisos para ver ventas (ventasGenerales, historialVentas y preventas)
+                     se asignan por defecto a true y no se muestran como opción en este formulario. -->
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary">Guardar Rol</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Cargar el script principal de usuarios -->
+    <script type="module" src="usuarios.js"></script>
+  </body>
+</html>
