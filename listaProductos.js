@@ -363,6 +363,75 @@ function getCurrentStock(product, store = currentStore) {
 }
 
 /*********************************************
+ * FUNCIONES CRUD PARA PRODUCTOS - CARGA MASIVA
+ *********************************************/
+async function cargarConCadenaTexto() {
+  const { value: textData } = await Swal.fire({
+    title: "Cargar Productos en Masa",
+    html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Ingresa los productos en formato CSV:&#10;Código,Descripción,Talla,Precio,Stock (opcional)"></textarea>`,
+    focusConfirm: false,
+    preConfirm: () => {
+      const text = document.getElementById("swal-textarea").value.trim();
+      if (!text) {
+        Swal.showValidationMessage("Debes ingresar datos para cargar");
+        return;
+      }
+      return text;
+    }
+  });
+  if (!textData) return;
+
+  // Se asume que cada línea es un producto separado por salto de línea
+  const lines = textData.split("\n").filter(line => line.trim() !== "");
+  let productosNuevos = [];
+  lines.forEach(line => {
+    const parts = line.split(",").map(item => item.trim());
+    if (parts.length < 4) {
+      // Se requieren al menos 4 campos: Código, Descripción, Talla, Precio
+      return;
+    }
+    const codigo = parts[0];
+    const descripcion = parts[1];
+    const talla = parts[2];
+    const precio = parseFloat(parts[3]);
+    if (!codigo || !descripcion || isNaN(precio) || precio <= 0) {
+      // Si algún dato no es válido, se omite la línea
+      return;
+    }
+    // Stock es opcional; si se incluye, se asigna al inventario de la tienda del usuario
+    let stock = {};
+    if (parts.length >= 5) {
+      const s = parseInt(parts[4]);
+      stock = { [loggedUserStore]: isNaN(s) ? 0 : s };
+    }
+    const nuevoProducto = {
+      codigo,
+      descripcion,
+      talla,
+      precio,
+      stock,
+      createdAt: new Date().toISOString()
+    };
+    productosNuevos.push(nuevoProducto);
+  });
+
+  if (productosNuevos.length === 0) {
+    Swal.fire("Atención", "No se encontraron productos válidos en los datos ingresados", "warning");
+    return;
+  }
+
+  try {
+    const promises = productosNuevos.map(async prod => {
+      await addDoc(collection(db, "productos"), prod);
+    });
+    await Promise.all(promises);
+    Swal.fire("Productos cargados", `${productosNuevos.length} productos fueron cargados correctamente`, "success");
+  } catch (error) {
+    Swal.fire("Error", "No se pudo cargar los productos: " + error.message, "error");
+  }
+}
+
+/*********************************************
  * INICIALIZACIÓN DE LA PÁGINA Y ASIGNACIÓN DE EVENTOS
  *********************************************/
 document.addEventListener("DOMContentLoaded", () => {
