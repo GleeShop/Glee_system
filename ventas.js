@@ -20,13 +20,18 @@ export let cart = [];
 
 // Datos del usuario y tienda  
 const usuarioActual = localStorage.getItem("loggedUser") || "admin";
+const loggedUserRole = localStorage.getItem("loggedUserRole") || "";
 // Se espera que window.currentStore esté definido (por ejemplo, asignado en aperturacaja.js o en index.html)
 export let currentStore = window.currentStore || "";
 
-/**
- * Genera un ID autoincremental para ventas consultando la colección "ventas".
- * Se usa el campo numérico "idVenta" para mantener la secuencia.
- */
+// Si el usuario no es Admin (por ejemplo, "Sucursal"), asigna automáticamente la tienda asociada.
+if (loggedUserRole.toLowerCase() !== "admin") {
+  currentStore = localStorage.getItem("loggedUserStore") || currentStore;
+  window.currentStore = currentStore;
+}
+
+// Genera un ID autoincremental para ventas consultando la colección "ventas".
+// Se usa el campo numérico "idVenta" para mantener la secuencia.
 export async function generarIdVentaCorta() {
   try {
     const ventasRef = collection(db, "ventas");
@@ -174,7 +179,6 @@ export function renderProducts() {
   });
 }
 
-
 /**
  * Agrega un producto al carrito.
  */
@@ -281,7 +285,7 @@ export async function procesarVenta() {
   });
   if (!saleCategory) return;
 
-  // Solicitar el código del empleado
+  // Solicitar el código del empleado y validarlo contra los empleados registrados
   const { value: empCodigo } = await Swal.fire({
     title: "Código del Empleado",
     input: "text",
@@ -291,10 +295,18 @@ export async function procesarVenta() {
       pattern: "^[A-Za-z0-9]{3}$",
       placeholder: "ABC"
     },
-    inputValidator: (value) => {
-      if (!value || !/^[A-Za-z0-9]{3}$/.test(value)) {
-        return "El código debe tener 3 caracteres alfanuméricos";
+    preConfirm: async () => {
+      const code = document.getElementById("swal-input").value.trim();
+      if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
+        Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
+        return;
       }
+      const nombre = await window.getEmployeeName(code);
+      if (nombre === code) {  // Si no se encontró empleado, getEmployeeName retorna el mismo código
+        Swal.showValidationMessage("Código de empleado no válido");
+        return;
+      }
+      return code;
     }
   });
   if (!empCodigo) return;
