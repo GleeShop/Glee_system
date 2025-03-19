@@ -1,4 +1,3 @@
-// historialCierre.js - Historial de Cierres con acciones de ver, anular, eliminar y descargar
 import { db } from "./firebase-config.js";
 import {
   collection,
@@ -11,6 +10,10 @@ import {
   doc,
   limit
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+// Obtener el rol del usuario desde localStorage y determinar si es admin
+const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
+const isAdmin = loggedUserRole === "admin";
 
 // Función para cargar y renderizar el historial de cierres
 export async function loadHistorialCierre(filterDate = "") {
@@ -33,6 +36,17 @@ export async function loadHistorialCierre(filterDate = "") {
     snapshot.forEach(docSnap => {
       const cierre = { id: docSnap.id, ...docSnap.data() };
       const tr = document.createElement("tr");
+
+      // Construir botones de acciones según rol:
+      // - Para admin se muestran: Ver, Anular, Eliminar y Descargar
+      // - Para sucursal (u otros) se muestran únicamente: Ver y Descargar
+      let buttonsHtml = `<button class="btn btn-info btn-sm" data-action="ver">Ver</button>`;
+      if (isAdmin) {
+        buttonsHtml += `<button class="btn btn-warning btn-sm" data-action="anular">Anular</button>
+                        <button class="btn btn-danger btn-sm" data-action="eliminar">Eliminar</button>`;
+      }
+      buttonsHtml += `<button class="btn btn-primary btn-sm" data-action="descargar">Descargar</button>`;
+
       tr.innerHTML = `
         <td>${cierre.fechaCierre}</td>
         <td>${cierre.lugar}</td>
@@ -42,10 +56,7 @@ export async function loadHistorialCierre(filterDate = "") {
         <td>Q ${Number(cierre.montoFinal).toFixed(2)}</td>
         <td>Q ${Number(cierre.diferencia).toFixed(2)}</td>
         <td>
-          <button class="btn btn-info btn-sm" data-action="ver">Ver</button>
-          <button class="btn btn-warning btn-sm" data-action="anular">Anular</button>
-          <button class="btn btn-danger btn-sm" data-action="eliminar">Eliminar</button>
-          <button class="btn btn-primary btn-sm" data-action="descargar">Descargar</button>
+          ${buttonsHtml}
         </td>
       `;
       // Asignar evento para cada acción
@@ -61,9 +72,13 @@ export async function loadHistorialCierre(filterDate = "") {
 
 // Función para manejar las acciones en cada cierre
 async function handleAccionCierre(action, cierre) {
-  switch(action) {
+  // Para usuarios de rol sucursal (o no admin), se evitan las acciones de anular y eliminar
+  if (!isAdmin && (action === "anular" || action === "eliminar")) {
+    return;
+  }
+
+  switch (action) {
     case "ver":
-      // Consultar el reporte almacenado en "reportescierre" para este cierre
       verReporteCierre(cierre);
       break;
     case "anular":
@@ -92,8 +107,10 @@ async function handleAccionCierre(action, cierre) {
 async function verReporteCierre(cierre) {
   try {
     const reportesRef = collection(db, "reportescierre");
-    const q = query(reportesRef, where("idCierre", "==", cierre.idhistorialCierre),
-    orderBy("createdAt", "desc"),
+    const q = query(
+      reportesRef,
+      where("idCierre", "==", cierre.idhistorialCierre),
+      orderBy("createdAt", "desc"),
       limit(1)
     );
     const snapshot = await getDocs(q);
@@ -152,9 +169,9 @@ async function descargarReporteCierreHistorial(cierre) {
   }
 }
 
-// Permitir filtrar por fecha. Se espera que haya un input con id "filterDate"
+// Permitir filtrar por fecha. Se espera que el input tenga el id "filtroFecha"
 export function filtrarCierres() {
-  const filterDate = document.getElementById("filterDate").value;
+  const filterDate = document.getElementById("filtroFecha").value;
   if (filterDate) {
     const parts = filterDate.split("-");
     const fechaFormateada = `${parts[2]}/${parts[1]}/${parts[0]}`;

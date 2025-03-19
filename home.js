@@ -68,7 +68,7 @@ window.applyMenuPermissions = function (userData) {
 
 window.logout = function () {
   localStorage.removeItem("loggedUser");
-  window.location.href = "login.html";
+  window.location.href = "index.html";
 };
 
 document.addEventListener("DOMContentLoaded", async function () {
