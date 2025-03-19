@@ -250,7 +250,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
               <th>ID Venta</th>
               <th>Método de Pago</th>
               <th>Número de Referencia</th>
-              <th>Empleado</th>
+              <th>Vendedor</th>
               <th>Total</th>
             </tr>
           </thead>
