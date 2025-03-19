@@ -141,7 +141,6 @@ export async function cerrarCaja() {
   });
 }
 
-
 /**
  * Función para generar el reporte de cierre en formato HTML.
  * Se muestran los datos relevantes y la tabla de ventas.
