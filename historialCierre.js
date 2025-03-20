@@ -11,7 +11,7 @@ import {
   limit
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-// Obtener el rol del usuario desde localStorage y determinar si es admin
+// Obtener el rol del usuario desde localStorage
 const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
 const isAdmin = loggedUserRole === "admin";
 
@@ -35,31 +35,39 @@ export async function loadHistorialCierre(filterDate = "") {
     tableBody.innerHTML = "";
     snapshot.forEach(docSnap => {
       const cierre = { id: docSnap.id, ...docSnap.data() };
-      const tr = document.createElement("tr");
-
-      // Construir botones de acciones según rol:
-      // - Para admin se muestran: Ver, Anular, Eliminar y Descargar
-      // - Para sucursal (u otros) se muestran únicamente: Ver y Descargar
+      
+      // Botones de acciones según rol:
+      // - Admin: Ver, Anular, Eliminar y Descargar.
+      // - Otros: Ver y Descargar.
       let buttonsHtml = `<button class="btn btn-info btn-sm" data-action="ver">Ver</button>`;
       if (isAdmin) {
         buttonsHtml += `<button class="btn btn-warning btn-sm" data-action="anular">Anular</button>
                         <button class="btn btn-danger btn-sm" data-action="eliminar">Eliminar</button>`;
       }
       buttonsHtml += `<button class="btn btn-primary btn-sm" data-action="descargar">Descargar</button>`;
-
+      
+      // Construir la fila:
+      // Columna 1: Fecha y Hora (concatenados)
+      // Columna 2: Usuario (quien realizó el cierre)
+      // Columna 3: Venta Total (totalGeneral, con conversión)
+      // Columna 4: Monto de Apertura
+      // Columna 5: Total Efectivo Sistema
+      // Columna 6: Arqueo (montoFinal)
+      // Columna 7: Diferencia
+      // Columna 8: Acciones
+      const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${cierre.fechaCierre}</td>
-        <td>${cierre.lugar}</td>
-        <td>Q ${Number(cierre.totalGeneral).toFixed(2)}</td>
-        <td>Q ${Number(cierre.montoApertura).toFixed(2)}</td>
-        <td>Q ${Number(cierre.totalEfectivoSistema).toFixed(2)}</td>
-        <td>Q ${Number(cierre.montoFinal).toFixed(2)}</td>
-        <td>Q ${Number(cierre.diferencia).toFixed(2)}</td>
+        <td>${cierre.fechaCierre} ${cierre.horaCierre}</td>
+        <td>${cierre.usuario || ""}</td>
+        <td>Q ${Number(cierre.totalGeneral || 0).toFixed(2)}</td>
+        <td>Q ${Number(cierre.montoApertura || 0).toFixed(2)}</td>
+        <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
+        <td>Q ${Number(cierre.montoFinal || 0).toFixed(2)}</td>
+        <td>Q ${Number(cierre.diferencia || 0).toFixed(2)}</td>
         <td>
           ${buttonsHtml}
         </td>
       `;
-      // Asignar evento para cada acción
       tr.querySelectorAll("button").forEach(btn => {
         btn.addEventListener("click", () => handleAccionCierre(btn.getAttribute("data-action"), cierre));
       });
@@ -72,11 +80,10 @@ export async function loadHistorialCierre(filterDate = "") {
 
 // Función para manejar las acciones en cada cierre
 async function handleAccionCierre(action, cierre) {
-  // Para usuarios de rol sucursal (o no admin), se evitan las acciones de anular y eliminar
+  // Para usuarios que no sean admin, se evitan las acciones de anular y eliminar
   if (!isAdmin && (action === "anular" || action === "eliminar")) {
     return;
   }
-
   switch (action) {
     case "ver":
       verReporteCierre(cierre);
@@ -117,11 +124,10 @@ async function verReporteCierre(cierre) {
     if (!snapshot.empty) {
       let reporteHtml = "";
       snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        reporteHtml = data.reporte;
+        reporteHtml = docSnap.data().reporte;
       });
       Swal.fire({
-        title: " ",
+        title: "Reporte de Cierre",
         html: reporteHtml,
         width: "80%"
       });
@@ -142,8 +148,7 @@ async function descargarReporteCierreHistorial(cierre) {
     if (!snapshot.empty) {
       let reporteHtml = "";
       snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        reporteHtml = data.reporte;
+        reporteHtml = docSnap.data().reporte;
       });
       // Crear un contenedor temporal
       let container = document.createElement("div");
