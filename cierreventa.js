@@ -45,7 +45,8 @@ export async function cerrarCaja() {
     html: `<p>Fecha de cierre: ${fechaHoy}</p>
            <input type="number" id="montoFinal" class="swal2-input" placeholder="Monto final en caja (Q)">`,
     preConfirm: () => {
-      const mf = parseFloat(document.getElementById("montoFinal").value);
+      const inputVal = document.getElementById("montoFinal").value;
+      const mf = parseFloat(inputVal);
       if (isNaN(mf)) {
         Swal.showValidationMessage("Monto final inválido");
       }
@@ -53,7 +54,7 @@ export async function cerrarCaja() {
     }
   });
 
-  if (montoFinal === undefined) return;
+  if (montoFinal === undefined || isNaN(montoFinal)) return;
 
   // Consultar las ventas asociadas a la apertura activa (se asume que se registran en la colección "ventas")
   const ventasQuery = query(
@@ -83,8 +84,10 @@ export async function cerrarCaja() {
     }
   });
 
-  // Guarda el monto de apertura en una variable local antes de eliminarlo
-  const aperturaMonto = Number(window.montoApertura) || 0;
+  // Capturamos el monto de apertura desde localStorage, en caso de que window.montoApertura ya no esté disponible
+  const storedMontoApertura = localStorage.getItem("montoApertura");
+  const aperturaMonto = storedMontoApertura ? Number(storedMontoApertura) : 0;
+
   let totalEfectivoSistema = aperturaMonto + Number(totalEfectivo);
   let diferencia = Number(montoFinal) - totalEfectivoSistema;
 
@@ -92,7 +95,7 @@ export async function cerrarCaja() {
   let horaCierre = now.toTimeString().split(" ")[0];
   let idhistorialCierre = await getNextHistorialCierre();
 
-  // Construir el objeto cierre usando aperturaMonto
+  // Construir el objeto cierre usando el monto de apertura almacenado en aperturaMonto
   let cierreData = {
     idhistorialCierre,
     fechaCierre: fechaHoy,
@@ -146,6 +149,7 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
+  // Se usa el monto de apertura almacenado en cierreData
   let montoApertura = Number(cierreData.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
