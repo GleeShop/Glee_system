@@ -1,192 +1,245 @@
-import { db } from "./firebase-config.js";
-import {
-  collection,
-  orderBy,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  doc,
-  limit
-} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-
-// Obtener el rol del usuario desde localStorage
-const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
-const isAdmin = loggedUserRole === "admin";
-
-// Función para cargar y renderizar el historial de cierres
-export async function loadHistorialCierre(filterDate = "") {
-  try {
-    let cierresRef = collection(db, "cierres");
-    let q;
-    if (filterDate) {
-      // Se asume que la fecha se almacena en formato dd/mm/yyyy
-      q = query(cierresRef, where("fechaCierre", "==", filterDate));
-    } else {
-      q = query(cierresRef);
-    }
-    const snapshot = await getDocs(q);
-    const tableBody = document.getElementById("historialCierreBody");
-    if (!tableBody) {
-      console.error("Elemento 'historialCierreBody' no encontrado en el DOM.");
-      return;
-    }
-    tableBody.innerHTML = "";
-    snapshot.forEach(docSnap => {
-      const cierre = { id: docSnap.id, ...docSnap.data() };
-      
-      // Botones de acciones según rol:
-      // - Admin: Ver, Anular, Eliminar y Descargar.
-      // - Otros: Ver y Descargar.
-      let buttonsHtml = `<button class="btn btn-info btn-sm" data-action="ver">Ver</button>`;
-      if (isAdmin) {
-        buttonsHtml += `<button class="btn btn-warning btn-sm" data-action="anular">Anular</button>
-                        <button class="btn btn-danger btn-sm" data-action="eliminar">Eliminar</button>`;
-      }
-      buttonsHtml += `<button class="btn btn-primary btn-sm" data-action="descargar">Descargar</button>`;
-      
-      // Construir la fila:
-      // Columna 1: Fecha y Hora (concatenados)
-      // Columna 2: Usuario (quien realizó el cierre)
-      // Columna 3: Venta Total (totalGeneral, con conversión)
-      // Columna 4: Monto de Apertura
-      // Columna 5: Total Efectivo Sistema
-      // Columna 6: Arqueo (montoFinal)
-      // Columna 7: Diferencia
-      // Columna 8: Acciones
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${cierre.fechaCierre} ${cierre.horaCierre}</td>
-        <td>${cierre.usuario || ""}</td>
-        <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
-        <td>Q ${Number(cierre.aperturaMonto || 0).toFixed(2)}</td>
-        <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
-        <td>Q ${Number(cierre.montoFinal || 0).toFixed(2)}</td>
-        <td>Q ${Number(cierre.diferencia || 0).toFixed(2)}</td>
-        <td>
-          ${buttonsHtml}
-        </td>
-      `;
-      tr.querySelectorAll("button").forEach(btn => {
-        btn.addEventListener("click", () => handleAccionCierre(btn.getAttribute("data-action"), cierre));
-      });
-      tableBody.appendChild(tr);
-    });
-  } catch (error) {
-    console.error("Error cargando el historial de cierres:", error);
-  }
-}
-
-// Función para manejar las acciones en cada cierre
-async function handleAccionCierre(action, cierre) {
-  // Para usuarios que no sean admin, se evitan las acciones de anular y eliminar
-  if (!isAdmin && (action === "anular" || action === "eliminar")) {
+export async function cerrarCaja() {
+  if (!window.cajaAbierta || !window.idAperturaActivo) {
+    Swal.fire("Error", "Debes abrir la caja antes de cerrar.", "warning");
     return;
   }
-  switch (action) {
-    case "ver":
-      verReporteCierre(cierre);
-      break;
-    case "anular":
-      if (confirm("¿Estás seguro de anular este cierre?")) {
-        await updateDoc(doc(db, "cierres", cierre.id), { anulado: true });
-        alert("Cierre anulado");
-        loadHistorialCierre();
+
+  let fechaHoy = formatDate(new Date());
+  const { value: montoFinal } = await Swal.fire({
+    title: "Cerrar Caja",
+    html: `<p>Fecha de cierre: ${fechaHoy}</p>
+           <input type="number" id="montoFinal" class="swal2-input" placeholder="Monto final en caja (Q)">`,
+    preConfirm: () => {
+      const inputVal = document.getElementById("montoFinal").value;
+      const mf = parseFloat(inputVal);
+      if (isNaN(mf)) {
+        Swal.showValidationMessage("Monto final inválido");
       }
-      break;
-    case "eliminar":
-      if (confirm("¿Estás seguro de eliminar este cierre? Esta acción no se puede deshacer.")) {
-        await deleteDoc(doc(db, "cierres", cierre.id));
-        alert("Cierre eliminado");
-        loadHistorialCierre();
-      }
-      break;
-    case "descargar":
-      descargarReporteCierreHistorial(cierre);
-      break;
-    default:
-      break;
-  }
-}
-
-// Función para ver el reporte del cierre (se asume que se almacenó en la colección "reportescierre")
-async function verReporteCierre(cierre) {
-  try {
-    const reportesRef = collection(db, "reportescierre");
-    const q = query(
-      reportesRef,
-      where("idCierre", "==", cierre.idhistorialCierre),
-      orderBy("createdAt", "desc"),
-      limit(1)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      let reporteHtml = "";
-      snapshot.forEach(docSnap => {
-        reporteHtml = docSnap.data().reporte;
-      });
-      Swal.fire({
-        title: "Reporte de Cierre",
-        html: reporteHtml,
-        width: "80%"
-      });
-    } else {
-      Swal.fire("No se encontró reporte para este cierre", "", "warning");
+      return mf;
     }
-  } catch (error) {
-    console.error("Error al ver el reporte:", error);
-  }
-}
+  });
 
-// Función para descargar el reporte del cierre como PNG usando html2canvas
-async function descargarReporteCierreHistorial(cierre) {
-  try {
-    const reportesRef = collection(db, "reportescierre");
-    const q = query(reportesRef, where("idCierre", "==", cierre.idhistorialCierre));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      let reporteHtml = "";
-      snapshot.forEach(docSnap => {
-        reporteHtml = docSnap.data().reporte;
-      });
-      // Crear un contenedor temporal
-      let container = document.createElement("div");
-      container.innerHTML = reporteHtml;
-      container.style.position = "absolute";
-      container.style.left = "-9999px";
-      document.body.appendChild(container);
-      html2canvas(container).then(canvas => {
-        let dataURL = canvas.toDataURL("image/png");
-        let a = document.createElement("a");
-        a.href = dataURL;
-        a.download = `reporte-cierre-${cierre.idhistorialCierre}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        document.body.removeChild(container);
-      });
-    } else {
-      alert("No se encontró reporte para descargar.");
+  // Asegurarse de que se obtuvo un valor válido
+  if (montoFinal === undefined || isNaN(montoFinal)) return;
+
+  // Consultar las ventas asociadas a la apertura activa (se asume que se registran en la colección "ventas")
+  const ventasQuery = query(
+    collection(db, "ventas"),
+    where("idApertura", "==", window.idAperturaActivo)
+  );
+  const ventasSnapshot = await getDocs(ventasQuery);
+  
+  let totalEfectivo = 0,
+      totalTarjeta = 0,
+      totalTransferencia = 0,
+      ventaLinea = 0;
+  let ventasDetalle = [];
+
+  ventasSnapshot.forEach(docSnap => {
+    let venta = docSnap.data();
+    ventasDetalle.push(venta);
+    const metodo = venta.metodo_pago.toLowerCase();
+    if (metodo === "efectivo") {
+      totalEfectivo += Number(venta.total || 0);
+    } else if (metodo === "tarjeta") {
+      totalTarjeta += Number(venta.total || 0);
+    } else if (metodo === "transferencia") {
+      totalTransferencia += Number(venta.total || 0);
+    } else if (metodo === "en línea" || metodo === "en linea") {
+      ventaLinea += Number(venta.total || 0);
     }
-  } catch (error) {
-    console.error("Error al descargar el reporte:", error);
-  }
+  });
+
+  // Guarda el monto de apertura en una variable local antes de eliminarlo
+  const aperturaMonto = Number(window.montoApertura) || 0;
+  let totalEfectivoSistema = aperturaMonto + Number(totalEfectivo);
+  let diferencia = Number(montoFinal) - totalEfectivoSistema;
+
+  let now = new Date();
+  let horaCierre = now.toTimeString().split(" ")[0];
+  let idhistorialCierre = await getNextHistorialCierre();
+
+  // Construir el objeto cierre usando la variable montoFinal
+  let cierreData = {
+    idhistorialCierre,
+    fechaCierre: fechaHoy,
+    horaCierre,
+    // Usamos aperturaMonto ya almacenado
+    montoApertura: aperturaMonto,
+    totalEfectivo: Number(totalEfectivo) || 0,
+    totalTarjeta: Number(totalTarjeta) || 0,
+    totalTransferencia: Number(totalTransferencia) || 0,
+    ventaLinea: Number(ventaLinea) || 0,
+    totalEfectivoSistema: totalEfectivoSistema,
+    totalIngresado: Number(montoFinal) || 0,  // Este valor representa el arqueo ingresado
+    diferencia: diferencia,
+    usuario: localStorage.getItem("loggedUser") || "admin"
+  };
+
+  // Actualiza la apertura como cerrada en Firestore
+  await updateDoc(doc(db, "aperturas", window.idAperturaActivo), { activo: false });
+  // Registra el cierre en la colección "cierres"
+  await addDoc(collection(db, "cierres"), cierreData);
+
+  // Elimina la persistencia de apertura
+  localStorage.removeItem("cajaAbierta");
+  localStorage.removeItem("idAperturaActivo");
+  localStorage.removeItem("datosApertura");
+  localStorage.removeItem("montoApertura");
+
+  window.cajaAbierta = false;
+  window.idAperturaActivo = null;
+
+  // Generar reporte en HTML utilizando las ventas y cierreData
+  const reporteHtml = generarReporteCierreHTML(ventasDetalle, cierreData);
+  await addDoc(collection(db, "reportescierre"), {
+    idCierre: idhistorialCierre,
+    reporte: reporteHtml,
+    fechaCierre: cierreData.fechaCierre,
+    createdAt: new Date().toISOString()
+  });
+
+  Swal.fire({
+    title: "Cierre Registrado",
+    html: `<p>Se ha cerrado la caja correctamente.</p>
+           <p>Total Efectivo Sistema: Q ${totalEfectivoSistema.toFixed(2)}</p>
+           <p>Total Ingresado: Q ${Number(montoFinal).toFixed(2)}</p>
+           <p>Diferencia: Q ${diferencia.toFixed(2)}</p>`,
+    icon: "success"
+  });
 }
 
-// Permitir filtrar por fecha. Se espera que el input tenga el id "filtroFecha"
-export function filtrarCierres() {
-  const filterDate = document.getElementById("filtroFecha").value;
-  if (filterDate) {
-    const parts = filterDate.split("-");
-    const fechaFormateada = `${parts[2]}/${parts[1]}/${parts[0]}`;
-    loadHistorialCierre(fechaFormateada);
-  } else {
-    loadHistorialCierre();
-  }
+/**
+ * Función para generar el reporte de cierre en formato HTML.
+ * Se muestran los datos relevantes y la tabla de ventas.
+ */
+function generarReporteCierreHTML(ventasDetalle, cierreData) {
+  // Se usa el monto de apertura almacenado en cierreData, ya que window.montoApertura se elimina
+  let montoApertura = Number(cierreData.montoApertura) || 0;
+  let totalEfectivo = Number(cierreData.totalEfectivo || 0);
+  let totalTarjeta = Number(cierreData.totalTarjeta || 0);
+  let totalTransferencia = Number(cierreData.totalTransferencia || 0);
+  let ventaLinea = Number(cierreData.ventaLinea || 0);
+  let totalIngresado = Number(cierreData.totalIngresado || 0);
+  let totalEfectivoSistema = montoApertura + Number(cierreData.totalEfectivo || 0);
+  let diferencia = Number(cierreData.totalIngresado || 0) - totalEfectivoSistema;
+  let diferenciaColor = diferencia >= 0 ? "green" : "red";
+  
+  let envios = 0;
+  let preventas = 0;
+  let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
+  
+  let ventasRows = ventasDetalle.map(venta => {
+    return `<tr>
+              <td>${venta.idVenta}</td>
+              <td>${venta.metodo_pago}</td>
+              <td>${venta.numeroTransferencia || ''}</td>
+              <td>${venta.empleadoNombre || ''}</td>
+              <td>Q ${Number(venta.total || 0).toFixed(2)}</td>
+            </tr>`;
+  }).join('');
+  
+  return `
+    <div id="reporte-cierre" style="width:800px; padding:20px; font-family:Arial, sans-serif;">
+      <div style="text-align: center;">
+        <img src="img/GLEED2.png" alt="Logo" style="max-height: 100px;"><br>
+        <h2>Reporte de Cierre</h2>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <div style="text-align: left;">
+          <p><strong>N° Cierre:</strong> ${cierreData.idhistorialCierre}</p>
+          <p><strong>Fecha y Hora de Cierre:</strong> ${cierreData.fechaCierre} ${cierreData.horaCierre}</p>
+        </div>
+        <div style="text-align: right;">
+          <p><strong>Monto de Apertura:</strong> Q ${montoApertura.toFixed(2)}</p>
+        </div>
+      </div>
+      
+      <hr style="border-top: 2px solid #000; margin-bottom: 10px;">
+      
+      <div style="margin-bottom: 10px;">
+        <h3 style="text-align: center;">Detalle de Ventas</h3>
+        <table style="width:100%; text-align: center; border-collapse: collapse;" border="1" cellpadding="5">
+          <tr>
+            <th>Efectivo</th>
+            <th>Tarjeta</th>
+            <th>Transferencia</th>
+            <th>En línea</th>
+            <th>Envíos</th>
+            <th>Preventas</th>
+            <th>Total</th>
+          </tr>
+          <tr>
+            <td>Q ${totalEfectivo.toFixed(2)}</td>
+            <td>Q ${totalTarjeta.toFixed(2)}</td>
+            <td>Q ${totalTransferencia.toFixed(2)}</td>
+            <td>Q ${ventaLinea.toFixed(2)}</td>
+            <td>Q ${envios.toFixed(2)}</td>
+            <td>Q ${preventas.toFixed(2)}</td>
+            <td>Q ${totalVentasDetalle.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <hr style="border-top: 2px solid #000; margin-bottom: 10px;">
+      
+      <div style="margin-bottom: 10px;">
+        <h3 style="text-align: center;">Totales</h3>
+        <table style="width:100%; text-align: center; border-collapse: collapse;" border="1" cellpadding="5">
+          <tr>
+            <th>Total Efectivo</th>
+            <th>Arqueo</th>
+            <th>Diferencia</th>
+          </tr>
+          <tr>
+            <td>Q ${totalEfectivoSistema.toFixed(2)}</td>
+            <td>Q ${totalIngresado.toFixed(2)}</td>
+            <td style="color:${diferenciaColor};">Q ${diferencia.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <hr style="border-top: 2px solid #000; margin-bottom: 10px;">
+      
+      <div style="margin-bottom: 10px;">
+        <h3 style="text-align: center;">Ventas Realizadas</h3>
+        <table style="width:100%; border-collapse: collapse;" border="1" cellpadding="5">
+          <thead>
+            <tr>
+              <th>ID Venta</th>
+              <th>Método de Pago</th>
+              <th>Número de Referencia</th>
+              <th>Vendedor</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ventasRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
-// Inicializar la carga del historial al cargar la página
-window.addEventListener("DOMContentLoaded", () => {
-  loadHistorialCierre();
-});
+window.descargarReporteCierre = function(cierreData, ventasDetalle) {
+  const reporteHtml = generarReporteCierreHTML(ventasDetalle, cierreData);
+  let container = document.createElement("div");
+  container.innerHTML = reporteHtml;
+  container.style.position = "absolute";
+  container.style.left = "-9999px";
+  document.body.appendChild(container);
+  html2canvas(container).then(canvas => {
+    let dataURL = canvas.toDataURL("image/png");
+    let a = document.createElement("a");
+    a.href = dataURL;
+    a.download = `reporte-cierre-${cierreData.idhistorialCierre}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    document.body.removeChild(container);
+  });
+};
+
+window.cerrarCaja = cerrarCaja;
