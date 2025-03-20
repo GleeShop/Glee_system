@@ -1,3 +1,38 @@
+// cierreventa.js - Cierre de Caja y Reporte de Ventas
+import { db } from "./firebase-config.js";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  addDoc,
+  orderBy,
+  limit
+} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+import { formatDate, parseDate } from "./ventas.js";
+
+export async function getNextHistorialCierre() {
+  try {
+    const cierresRef = collection(db, "cierres");
+    const q = query(cierresRef, orderBy("idhistorialCierre", "desc"), limit(1));
+    const snapshot = await getDocs(q);
+    let nextId = 1;
+    if (!snapshot.empty) {
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        nextId = parseInt(data.idhistorialCierre) + 1;
+      });
+    }
+    return nextId;
+  } catch (error) {
+    console.error("Error al obtener el próximo idhistorialCierre:", error);
+    return Math.floor(Math.random() * 90000) + 10000;
+  }
+}
+
 export async function cerrarCaja() {
   if (!window.cajaAbierta || !window.idAperturaActivo) {
     Swal.fire("Error", "Debes abrir la caja antes de cerrar.", "warning");
@@ -57,7 +92,7 @@ export async function cerrarCaja() {
   let horaCierre = now.toTimeString().split(" ")[0];
   let idhistorialCierre = await getNextHistorialCierre();
 
-  // Construir el objeto cierre usando el monto de apertura almacenado en aperturaMonto
+  // Construir el objeto cierre usando aperturaMonto
   let cierreData = {
     idhistorialCierre,
     fechaCierre: fechaHoy,
@@ -87,7 +122,7 @@ export async function cerrarCaja() {
   window.cajaAbierta = false;
   window.idAperturaActivo = null;
 
-  // Generar reporte en HTML utilizando la variable ventasDetalle y los datos del cierre
+  // Generar reporte en HTML utilizando las ventas y cierreData
   const reporteHtml = generarReporteCierreHTML(ventasDetalle, cierreData);
   await addDoc(collection(db, "reportescierre"), {
     idCierre: idhistorialCierre,
@@ -111,8 +146,7 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
-  // Utiliza el monto de apertura guardado en cierreData
-  let aperturaMonto = Number(cierreData.aperturaMonto) || 0;
+  let montoApertura = Number(cierreData.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
   let totalTransferencia = Number(cierreData.totalTransferencia || 0);
@@ -126,7 +160,6 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   let preventas = 0;
   let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
   
-  // Construir la tabla de ventas realizadas
   let ventasRows = ventasDetalle.map(venta => {
     return `<tr>
               <td>${venta.idVenta}</td>
@@ -221,7 +254,6 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   `;
 }
 
-// Función para descargar el reporte de cierre como imagen PNG usando html2canvas
 window.descargarReporteCierre = function(cierreData, ventasDetalle) {
   const reporteHtml = generarReporteCierreHTML(ventasDetalle, cierreData);
   let container = document.createElement("div");
