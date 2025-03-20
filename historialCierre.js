@@ -60,7 +60,7 @@ export async function loadHistorialCierre(filterDate = "") {
         <td>${cierre.fechaCierre} ${cierre.horaCierre}</td>
         <td>${cierre.usuario || ""}</td>
         <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
-        <td>Q ${Number(cierre.montoApertura || 0).toFixed(2)}</td>
+        <td>Q ${Number(cierre.aperturaMonto || 0).toFixed(2)}</td>
         <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
         <td>Q ${Number(cierre.montoFinal || 0).toFixed(2)}</td>
         <td>Q ${Number(cierre.diferencia || 0).toFixed(2)}</td>
