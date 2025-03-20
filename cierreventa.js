@@ -35,7 +35,7 @@ export async function getNextHistorialCierre() {
 
 export async function cerrarCaja() {
   if (!window.cajaAbierta || !window.idAperturaActivo) {
-    Swal.fire("Error", "No hay una apertura activa", "warning");
+    Swal.fire("Error", "Debes abrir la caja antes de cerrar.", "warning");
     return;
   }
 
@@ -93,6 +93,7 @@ export async function cerrarCaja() {
   let horaCierre = now.toTimeString().split(" ")[0];
   let idhistorialCierre = await getNextHistorialCierre();
 
+  // Construir el objeto cierre usando los datos recolectados
   let cierreData = {
     idhistorialCierre,
     fechaCierre: fechaHoy,
@@ -122,7 +123,7 @@ export async function cerrarCaja() {
   window.cajaAbierta = false;
   window.idAperturaActivo = null;
 
-  // Generar reporte en HTML utilizando la variable ventasDetalle
+  // Generar reporte en HTML utilizando la variable ventasDetalle y los datos del cierre
   const reporteHtml = generarReporteCierreHTML(ventasDetalle, cierreData);
   await addDoc(collection(db, "reportescierre"), {
     idCierre: idhistorialCierre,
@@ -146,8 +147,8 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
-  // Se asegura que los valores sean numéricos
-  let montoApertura = Number(window.montoApertura) || 0;
+  // Usar el monto de apertura del objeto cierreData, ya que window.montoApertura se elimina
+  let montoApertura = Number(cierreData.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
   let totalTransferencia = Number(cierreData.totalTransferencia || 0);
@@ -157,7 +158,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   let diferencia = Number(cierreData.totalIngresado || 0) - totalEfectivoSistema;
   let diferenciaColor = diferencia >= 0 ? "green" : "red";
   
-  // Para Detalle de Ventas: se usan los valores existentes; si no cuentas con envíos y preventas, se asignan 0.
+  // Para Detalle de Ventas: se asignan 0 a envíos y preventas si no se usan
   let envios = 0;
   let preventas = 0;
   let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
@@ -185,8 +186,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
       <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
         <div style="text-align: left;">
           <p><strong>N° Cierre:</strong> ${cierreData.idhistorialCierre}</p>
-          <p><strong>Fecha de Cierre:</strong> ${cierreData.fechaCierre}</p>
-          <p><strong>Hora de Cierre:</strong> ${cierreData.horaCierre}</p>
+          <p><strong>Fecha y Hora de Cierre:</strong> ${cierreData.fechaCierre} ${cierreData.horaCierre}</p>
         </div>
         <div style="text-align: right;">
           <p><strong>Monto de Apertura:</strong> Q ${montoApertura.toFixed(2)}</p>
@@ -250,7 +250,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
               <th>ID Venta</th>
               <th>Método de Pago</th>
               <th>Número de Referencia</th>
-              <th>Vendedor</th>
+              <th>Empleado</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -262,7 +262,6 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
     </div>
   `;
 }
-
 
 // Función para descargar el reporte de cierre como imagen PNG usando html2canvas
 window.descargarReporteCierre = function(cierreData, ventasDetalle) {
