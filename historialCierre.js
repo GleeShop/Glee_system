@@ -1,3 +1,38 @@
+// cierreventa.js - Cierre de Caja y Reporte de Ventas
+import { db } from "./firebase-config.js";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  addDoc,
+  orderBy,
+  limit
+} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+import { formatDate, parseDate } from "./ventas.js";
+
+export async function getNextHistorialCierre() {
+  try {
+    const cierresRef = collection(db, "cierres");
+    const q = query(cierresRef, orderBy("idhistorialCierre", "desc"), limit(1));
+    const snapshot = await getDocs(q);
+    let nextId = 1;
+    if (!snapshot.empty) {
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        nextId = parseInt(data.idhistorialCierre) + 1;
+      });
+    }
+    return nextId;
+  } catch (error) {
+    console.error("Error al obtener el próximo idhistorialCierre:", error);
+    return Math.floor(Math.random() * 90000) + 10000;
+  }
+}
+
 export async function cerrarCaja() {
   if (!window.cajaAbierta || !window.idAperturaActivo) {
     Swal.fire("Error", "Debes abrir la caja antes de cerrar.", "warning");
@@ -19,7 +54,6 @@ export async function cerrarCaja() {
     }
   });
 
-  // Asegurarse de que se obtuvo un valor válido
   if (montoFinal === undefined || isNaN(montoFinal)) return;
 
   // Consultar las ventas asociadas a la apertura activa (se asume que se registran en la colección "ventas")
@@ -50,8 +84,10 @@ export async function cerrarCaja() {
     }
   });
 
-  // Guarda el monto de apertura en una variable local antes de eliminarlo
-  const aperturaMonto = Number(window.montoApertura) || 0;
+  // Capturamos el monto de apertura desde localStorage, en caso de que window.montoApertura ya no esté disponible
+  const storedMontoApertura = localStorage.getItem("montoApertura");
+  const aperturaMonto = storedMontoApertura ? Number(storedMontoApertura) : 0;
+
   let totalEfectivoSistema = aperturaMonto + Number(totalEfectivo);
   let diferencia = Number(montoFinal) - totalEfectivoSistema;
 
@@ -59,19 +95,18 @@ export async function cerrarCaja() {
   let horaCierre = now.toTimeString().split(" ")[0];
   let idhistorialCierre = await getNextHistorialCierre();
 
-  // Construir el objeto cierre usando la variable montoFinal
+  // Construir el objeto cierre usando el monto de apertura almacenado en aperturaMonto
   let cierreData = {
     idhistorialCierre,
     fechaCierre: fechaHoy,
     horaCierre,
-    // Usamos aperturaMonto ya almacenado
     montoApertura: aperturaMonto,
     totalEfectivo: Number(totalEfectivo) || 0,
     totalTarjeta: Number(totalTarjeta) || 0,
     totalTransferencia: Number(totalTransferencia) || 0,
     ventaLinea: Number(ventaLinea) || 0,
     totalEfectivoSistema: totalEfectivoSistema,
-    totalIngresado: Number(montoFinal) || 0,  // Este valor representa el arqueo ingresado
+    totalIngresado: Number(montoFinal) || 0,
     diferencia: diferencia,
     usuario: localStorage.getItem("loggedUser") || "admin"
   };
@@ -114,7 +149,7 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
-  // Se usa el monto de apertura almacenado en cierreData, ya que window.montoApertura se elimina
+  // Se usa el monto de apertura almacenado en cierreData
   let montoApertura = Number(cierreData.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
