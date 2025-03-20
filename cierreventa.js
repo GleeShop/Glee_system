@@ -112,7 +112,7 @@ export async function cerrarCaja() {
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
   // Utiliza el monto de apertura guardado en cierreData
-  let aperturaMonto = Number(cierreData.montoApertura) || 0;
+  let aperturaMonto = Number(cierreData.aperturaMonto) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
   let totalTransferencia = Number(cierreData.totalTransferencia || 0);
