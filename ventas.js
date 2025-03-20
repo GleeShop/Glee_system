@@ -296,7 +296,7 @@ export async function procesarVenta() {
       placeholder: "ABC"
     },
     preConfirm: async () => {
-      const code = document.getElementById("swal-input").value.trim();
+      const code = Swal.getInput().value.trim();
       if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
         Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
         return;
