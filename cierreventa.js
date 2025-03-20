@@ -67,6 +67,9 @@ export async function cerrarCaja() {
       totalTarjeta = 0,
       totalTransferencia = 0,
       ventaLinea = 0;
+  // Variables para envíos y preventas (se pueden sumar si existen)
+  let envios = 0,
+      preventas = 0;
   let ventasDetalle = [];
 
   ventasSnapshot.forEach(docSnap => {
@@ -95,7 +98,11 @@ export async function cerrarCaja() {
   let horaCierre = now.toTimeString().split(" ")[0];
   let idhistorialCierre = await getNextHistorialCierre();
 
-  // Construir el objeto cierre usando el monto de apertura almacenado en aperturaMonto
+  // Calcular el total de ventas detallado como suma de todos los métodos
+  let totalVentasDetalle =
+    totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
+
+  // Construir el objeto cierre
   let cierreData = {
     idhistorialCierre,
     fechaCierre: fechaHoy,
@@ -105,6 +112,7 @@ export async function cerrarCaja() {
     totalTarjeta: Number(totalTarjeta) || 0,
     totalTransferencia: Number(totalTransferencia) || 0,
     ventaLinea: Number(ventaLinea) || 0,
+    totalVentasDetalle: totalVentasDetalle, // Se almacena el dato calculado
     totalEfectivoSistema: totalEfectivoSistema,
     totalIngresado: Number(montoFinal) || 0,
     diferencia: diferencia,
@@ -149,7 +157,6 @@ export async function cerrarCaja() {
  * Se muestran los datos relevantes y la tabla de ventas.
  */
 function generarReporteCierreHTML(ventasDetalle, cierreData) {
-  // Se usa el monto de apertura almacenado en cierreData
   let montoApertura = Number(cierreData.montoApertura) || 0;
   let totalEfectivo = Number(cierreData.totalEfectivo || 0);
   let totalTarjeta = Number(cierreData.totalTarjeta || 0);
@@ -160,6 +167,7 @@ function generarReporteCierreHTML(ventasDetalle, cierreData) {
   let diferencia = Number(cierreData.totalIngresado || 0) - totalEfectivoSistema;
   let diferenciaColor = diferencia >= 0 ? "green" : "red";
   
+  // Valores para envíos y preventas
   let envios = 0;
   let preventas = 0;
   let totalVentasDetalle = totalEfectivo + totalTarjeta + totalTransferencia + ventaLinea + envios + preventas;
