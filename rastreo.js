@@ -4,14 +4,14 @@ import {
   query,
   orderBy,
   onSnapshot,
+  where,
   doc,
   updateDoc,
   getDoc,
-  where
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
 let dtInstance;
-
 const loggedUser = localStorage.getItem("loggedUser") || "";
 const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
 const isAdmin = loggedUserRole === "admin";
@@ -38,17 +38,22 @@ $(document).ready(function () {
     responsive: true
   });
 
+  // Inicializar filtro de fecha con la fecha actual pero sin aplicarlo automáticamente
+  const today = new Date().toISOString().split('T')[0];
+  $("#filtroFecha").val(today);
+
   cargarVentas();
 
-  $("#filtroFecha").on("change", cargarVentas);
+  $("#filtroFecha").on("change", function () {
+    console.log("Filtro de fecha cambiado a:", $("#filtroFecha").val());
+    filtrarVentas();
+  });
 });
 
-function cargarVentas() {
+function cargarVentas(filterDate = "") {
+  console.log("Cargando ventas con filtro de fecha:", filterDate);
   const ventasRef = collection(db, "ventas");
-
-  let condiciones = [orderBy("fecha", "desc")];
-
-  condiciones.push(where("tipoVenta", "==", "online"));
+  let condiciones = [orderBy("fecha", "desc"), where("tipoVenta", "==", "online")];
 
   if (!isAdmin) {
     condiciones.push(where("usuario", "==", loggedUser));
@@ -61,84 +66,67 @@ function cargarVentas() {
 
     snapshot.forEach((docSnap) => {
       let venta = docSnap.data();
-      ventasEnLinea.push({ id: docSnap.id, ...venta });
+      venta.id = docSnap.id;
+
+      let fechaVenta;
+      if (venta.fecha instanceof Timestamp) {
+        fechaVenta = venta.fecha.toDate().toISOString().split("T")[0];
+      } else if (typeof venta.fecha === "string") {
+        fechaVenta = venta.fecha.split("T")[0];
+      } else {
+        fechaVenta = "";
+      }
+
+      console.log("Venta procesada:", venta, "Fecha procesada:", fechaVenta);
+
+      // Filtrar por fecha seleccionada
+      if (!filterDate || fechaVenta === filterDate) {
+        venta.fechaFormateada = fechaVenta ? new Date(fechaVenta).toLocaleDateString() : "";
+        ventasEnLinea.push(venta);
+      }
     });
 
-    const filas = ventasEnLinea.map((venta) => {
-      let idVentaMostrar = venta.idVenta ? Number(venta.idVenta) : venta.id;
-      const fechaVenta = venta.fecha ? new Date(venta.fecha).toLocaleString() : "";
-      const clienteDisplay = venta.cliente?.nombre || "";
-      const empleadoDisplay = venta.empleadoNombre || "N/A";
-      const metodoPagoDisplay = venta.metodo_pago || "";
-      const totalVentaDisplay = venta.total ? Number(venta.total).toFixed(2) : "0.00";
-      const estadoDisplay = venta.estado || "Pendiente Envío";
-
-      let acciones = `<button class="btn btn-sm btn-info" onclick="verVenta('${venta.id}')">VER</button>`;
-      acciones += ` <button class="btn btn-sm btn-secondary" onclick="cambiarEstadoVenta('${venta.id}', '${estadoDisplay}')">CAMBIAR ESTADO</button>`;
-
-      return [
-        venta.guia || "",
-        idVentaMostrar,
-        fechaVenta,
-        clienteDisplay,
-        empleadoDisplay,
-        "Q" + totalVentaDisplay,
-        metodoPagoDisplay,
-        estadoDisplay,
-        acciones
-      ];
-    });
-
-    dtInstance.clear();
-    dtInstance.rows.add(filas);
-    dtInstance.draw();
+    console.log("Ventas después del filtro:", ventasEnLinea);
+    actualizarTabla(ventasEnLinea);
   }, (error) => {
     console.error("Error en onSnapshot:", error);
   });
 }
 
-window.verVenta = async function (idVenta) {
-  try {
-    const ventaDoc = doc(db, "ventas", idVenta);
-    const docSnap = await getDoc(ventaDoc);
-    if (docSnap.exists()) {
-      let venta = docSnap.data();
-      venta.id = idVenta;
-      Swal.fire({
-        title: "Detalle de Venta",
-        html: `
-          <div>
-            <p><strong>ID:</strong> ${venta.idVenta ? Number(venta.idVenta) : venta.id}</p>
-            <p><strong>Fecha:</strong> ${new Date(venta.fecha).toLocaleString()}</p>
-            <p><strong>Cliente:</strong> ${venta.cliente?.nombre || ""}</p>
-            <p><strong>Empleado:</strong> ${venta.empleadoNombre || "N/A"}</p>
-            <p><strong>Total:</strong> Q${Number(venta.total).toFixed(2)}</p>
-            <p><strong>Método de Pago:</strong> ${venta.metodo_pago}</p>
-            <p><strong>Estado:</strong> ${venta.estado || "Pendiente Envío"}</p>
-          </div>
-        `,
-        showConfirmButton: true
-      });
-    }
-  } catch (error) {
-    Swal.fire("Error", error.toString(), "error");
-  }
-};
+function actualizarTabla(ventas) {
+  console.log("Actualizando tabla con ventas:", ventas);
+  const filas = ventas.map((venta) => {
+    let idVentaMostrar = venta.idVenta ? Number(venta.idVenta) : venta.id;
 
-window.cambiarEstadoVenta = function (idVenta, estadoActual) {
-  const ventaDoc = doc(db, "ventas", idVenta);
-  const nuevoEstado = (estadoActual === "Pendiente Envío") ? "Enviada" : "Pendiente Envío";
-  Swal.fire({
-    title: "¿Cambiar estado?",
-    text: `El estado actual es '${estadoActual}'. Se cambiará a '${nuevoEstado}'.`,
-    icon: "question",
-    showCancelButton: true,
-    confirmButtonText: "Sí, cambiar"
-  }).then((result) => {
-    if (result.isConfirmed) {
-      updateDoc(ventaDoc, { estado: nuevoEstado }).then(() => {
-        Swal.fire("Estado actualizado", `Nuevo estado: ${nuevoEstado}`, "success");
-      });
-    }
+    const clienteDisplay = venta.cliente?.nombre || "";
+    const empleadoDisplay = venta.empleadoNombre || "N/A";
+    const metodoPagoDisplay = venta.metodo_pago || "";
+    const totalVentaDisplay = venta.total ? Number(venta.total).toFixed(2) : "0.00";
+    const estadoDisplay = venta.estado || "Pendiente Envío";
+
+    let acciones = `<button class="btn btn-sm btn-info" onclick="verVenta('${venta.id}')">Ver</button>`;
+    acciones += ` <button class="btn btn-sm btn-secondary" onclick="cambiarEstadoVenta('${venta.id}', '${estadoDisplay}')">Enviar</button>`;
+
+    return [
+      venta.guia || "",
+      idVentaMostrar,
+      venta.fechaFormateada,
+      clienteDisplay,
+      empleadoDisplay,
+      "Q" + totalVentaDisplay,
+      metodoPagoDisplay,
+      estadoDisplay,
+      acciones
+    ];
   });
-};
+
+  dtInstance.clear();
+  dtInstance.rows.add(filas);
+  dtInstance.draw();
+}
+
+function filtrarVentas() {
+  const filtroFecha = $("#filtroFecha").val();
+  console.log("Ejecutando filtro con fecha:", filtroFecha);
+  cargarVentas(filtroFecha);
+}
