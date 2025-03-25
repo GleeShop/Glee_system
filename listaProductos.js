@@ -1,4 +1,4 @@
-import { db } from "./firebase-config.js"; // Ajusta la ruta según tu proyecto
+import { db } from "./firebase-config.js";  
 import {
   collection,
   addDoc,
@@ -8,7 +8,8 @@ import {
   onSnapshot,
   query,
   orderBy,
-  getDocs
+  getDocs,
+  where
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
 console.log("Verificando db =>", db);
@@ -487,6 +488,16 @@ function getCurrentStock(product, store = currentStore) {
  * FUNCIONES CRUD PARA PRODUCTOS - CARGA MASIVA
  *********************************************/
 async function cargarConCadenaTexto() {
+  // Si es admin debe haberse seleccionado una tienda para asignar el stock
+  if (loggedUserRole.toLowerCase() === "admin" && !currentStore) {
+    Swal.fire("Error", "Debes seleccionar una tienda en el filtro antes de cargar inventario.", "error");
+    return;
+  }
+  // Definir la tienda a utilizar según el rol
+  const storeKey = (loggedUserRole.toLowerCase() === "admin" && currentStore)
+    ? currentStore
+    : loggedUserStore;
+
   const { value: textData } = await Swal.fire({
     title: "Cargar Productos en Masa",
     html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Ingresa los productos en formato CSV:&#10;Código,Descripción,Talla,Precio,Color,Stock (opcional)"></textarea>`,
@@ -520,18 +531,18 @@ async function cargarConCadenaTexto() {
       // Si algún dato no es válido, se omite la línea
       return;
     }
-    // Stock es opcional; si se incluye, se asigna al inventario de la tienda del usuario
+    // Stock es opcional; si se incluye, se asigna al inventario de la tienda actual
     let stock = {};
     if (parts.length >= 6) {
       const s = parseInt(parts[5]);
-      stock = { [loggedUserStore]: isNaN(s) ? 0 : s };
+      stock = { [storeKey]: isNaN(s) ? 0 : s };
     }
     const nuevoProducto = {
       codigo,
       descripcion,
       talla,
       precio,
-      color, // Se agrega el color
+      color,
       stock,
       createdAt: new Date().toISOString()
     };
@@ -544,11 +555,27 @@ async function cargarConCadenaTexto() {
   }
 
   try {
+    // Para cada producto, se verifica si existe (por código) y se actualiza su stock o se crea uno nuevo
     const promises = productosNuevos.map(async prod => {
-      await addDoc(collection(db, "productos"), prod);
+      const productQuery = query(collection(db, "productos"), where("codigo", "==", prod.codigo));
+      const querySnapshot = await getDocs(productQuery);
+      if (querySnapshot.empty) {
+        // Producto no existe, se crea
+        await addDoc(collection(db, "productos"), prod);
+      } else {
+        // Producto existe, se actualiza el stock para la tienda correspondiente
+        const existingDoc = querySnapshot.docs[0];
+        const existingData = existingDoc.data();
+        let updatedStock = {};
+        if (existingData.stock && typeof existingData.stock === "object") {
+          updatedStock = { ...existingData.stock };
+        }
+        updatedStock[storeKey] = prod.stock[storeKey] !== undefined ? prod.stock[storeKey] : 0;
+        await updateDoc(doc(db, "productos", existingDoc.id), { stock: updatedStock });
+      }
     });
     await Promise.all(promises);
-    Swal.fire("Productos cargados", `${productosNuevos.length} productos fueron cargados correctamente`, "success");
+    Swal.fire("Productos cargados", `${productosNuevos.length} productos fueron cargados/actualizados correctamente`, "success");
   } catch (error) {
     Swal.fire("Error", "No se pudo cargar los productos: " + error.message, "error");
   }
