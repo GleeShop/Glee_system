@@ -443,6 +443,7 @@ export async function procesarVenta() {
     });
     if (!empCodigo) return;
     let empNombre = await window.getEmployeeName(empCodigo);
+    
     const result = await Swal.fire({
       title: "Procesar Venta - Física",
       html: `
@@ -528,6 +529,31 @@ export async function procesarVenta() {
   }
   // Rama para Venta en Línea
   else if (saleCategory === "online") {
+    const { value: empCodigo } = await Swal.fire({
+      title: "Código del Empleado",
+      input: "text",
+      inputLabel: "Ingrese el código del empleado (3 caracteres)",
+      inputAttributes: {
+        maxlength: 3,
+        pattern: "^[A-Za-z0-9]{3}$",
+        placeholder: "ABC"
+      },
+      preConfirm: async () => {
+        const code = Swal.getInput().value.trim();
+        if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
+          Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
+          return;
+        }
+        const nombre = await window.getEmployeeName(code);
+        if (nombre === code) {
+          Swal.showValidationMessage("Código de empleado no válido");
+          return;
+        }
+        return code;
+      }
+    });
+    if (!empCodigo) return;
+    let empNombre = await window.getEmployeeName(empCodigo);
     const result = await Swal.fire({
       title: "Procesar Venta - En Línea",
       html: `
@@ -538,8 +564,10 @@ export async function procesarVenta() {
         <input type="text" id="clienteDireccion" class="swal2-input" placeholder="Dirección (opc)">
         <hr>
         <h4>Detalle de la Venta</h4>
-        ${renderCartSummary()}
-        <input type="text" id="comprobantePago" class="swal2-input" placeholder="Comprobante de Pago">
+        ${cart.map(item => `<p>${item.producto} (${item.producto_codigo}) x ${item.cantidad} = Q${(item.cantidad*item.precio).toFixed(2)}</p>`).join('')}
+        <h4>Total Venta: Q${(parseFloat(document.getElementById("totalVenta").textContent) || 0).toFixed(2)}</h4>
+        <input type="text" id="guia" class="swal2-input" placeholder="Guía" required>
+        <input type="text" id="comprobantePago" class="swal2-input" placeholder="Comprobante de Pago" required>
         <textarea id="comentarioVenta" class="swal2-textarea" placeholder="Comentario (opcional)"></textarea>
       `,
       focusConfirm: false,
@@ -559,6 +587,11 @@ export async function procesarVenta() {
           Swal.showValidationMessage("El comprobante de pago es obligatorio");
           return;
         }
+        const guia = document.getElementById("guia").value.trim();
+        if (!guia) {
+          Swal.showValidationMessage("El campo Guía es obligatorio");
+          return;
+        }
         let clienteData = {
           nombre,
           telefono,
@@ -568,9 +601,10 @@ export async function procesarVenta() {
         let pagoObj = {
           metodo: "En Línea",
           comprobante,
+          guia,
           comentario: document.getElementById("comentarioVenta").value.trim()
         };
-        return { clienteData, pagoObj };
+        return { clienteData, pagoObj, guia };
       }
     });
     formData = result.value;
@@ -599,6 +633,7 @@ export async function procesarVenta() {
     idApertura: window.idAperturaActivo,
     empleadoNombre: formData.clienteData.empNombre || "",
     numeroTransferencia: formData.pagoObj.numeroTransferencia || "",
+    guia: formData.guia || "",
     montoAbono: formData.pagoObj.montoAbono || 0,
     tipoVenta: saleCategory
   };
@@ -679,6 +714,7 @@ window.descargarComprobante = function(venta) {
     <p><strong>Fecha:</strong> ${new Date(venta.fecha).toLocaleString()}</p>
     <p><strong>Empleado:</strong> ${venta.empleadoNombre}</p>
     <p><strong>Cliente:</strong> ${venta.cliente.nombre}</p>
+     <p><strong>Número de Guía:</strong> ${venta.cliente.guia}</p>
   `;
   // Mostrar el código de preventa o venta según corresponda
   if (venta.tipoVenta === "preventa") {
