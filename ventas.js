@@ -597,12 +597,13 @@ export async function procesarVenta() {
         if (metodo === "efectivo") {
           let montoRecibido = parseFloat(document.getElementById("montoRecibido").value) || 0;
           let totalVenta = cart.reduce((total, item) => total + (item.cantidad * item.precio), 0);
-          if (montoRecibido < totalVenta) {
-            Swal.showValidationMessage("Monto insuficiente para cubrir el total");
-            return false;
-          }
-          pagoObj.montoRecibido = montoRecibido;
-          pagoObj.cambio = montoRecibido - totalVenta;
+        if (montoRecibido < totalVenta) {
+          Swal.showValidationMessage("Monto insuficiente para cubrir el total");
+          return false;
+        }
+        pagoObj.montoRecibido = montoRecibido;
+        pagoObj.cambio = montoRecibido - totalVenta;
+
         }
         
         if (metodo === "transferencia") {
@@ -995,30 +996,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
   if (storeSelect) {
     storeSelect.addEventListener("change", renderProducts);
-    // Si el usuario no es Admin, se deshabilita el selector y se fija la tienda asociada.
     if (loggedUserRole.toLowerCase() !== "admin") {
       storeSelect.value = currentStore;
       storeSelect.disabled = true;
     }
   }
+
   const searchInput = document.getElementById("searchInput");
   if (searchInput) {
     searchInput.addEventListener("input", renderProducts);
   }
+
   const sizeFilter = document.getElementById("sizeFilter");
   if (sizeFilter) {
     sizeFilter.addEventListener("change", renderProducts);
   }
-  listenProducts();
-  
-  // Crear sidebar para mostrar el carrito de ventas y los botones de venta
-  crearSidebarCaja();
-});
 
-document.addEventListener("DOMContentLoaded", () => {
-  const storeSelect = document.getElementById("storeSelect");
-  if (storeSelect) {
-    storeSelect.addEventListener("change", renderProducts);
-  }
   listenProducts();
+  crearSidebarCaja();
 });
