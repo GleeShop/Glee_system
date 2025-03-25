@@ -60,22 +60,37 @@ console.log("Permisos de productos:", userPermissions);
 
 // Variable para el filtrado de tienda
 let currentStore = "";
+document.getElementById("adminStoreFilter").style.display = "block";
 
-// Configuración según rol: Si es admin se muestra el filtro de tienda
-if (loggedUserRole.toLowerCase() === "admin") {
-  document.getElementById("adminStoreFilter").style.display = "block";
-  document.getElementById("inventoryTitle").textContent = "Inventario: Stock Total";
-} else {
-  currentStore = loggedUserStore;
-  document.getElementById("inventoryTitle").textContent = `Inventario de: ${currentStore}`;
+// Actualiza el título del inventario según la tienda seleccionada
+function updateInventoryTitle() {
+  const titleElem = document.getElementById("inventoryTitle");
+  if (currentStore) {
+    titleElem.textContent = `Inventario de: ${currentStore}`;
+  } else {
+    titleElem.textContent = "Inventario: Stock Total";
+  }
 }
 
-// Función para cargar tiendas en el select (solo para admin)
+document.addEventListener("DOMContentLoaded", () => {
+  loadStoreFilter(); // Carga el select de tiendas
+  updateInventoryTitle(); // Título inicial (Stock Total)
+  
+  // Al cambiar la tienda, se actualiza currentStore y el título
+  document.getElementById("storeSelect").addEventListener("change", function () {
+    currentStore = this.value;
+    updateInventoryTitle();
+    listenProducts(); // Actualiza la visualización de productos según el filtro
+  });
+});
+
+// Carga de tiendas en el select (disponible para todos)
 async function loadStoreFilter() {
   try {
     const qStores = query(collection(db, "tiendas"), orderBy("nombre"));
     const snapshot = await getDocs(qStores);
     const storeSelect = document.getElementById("storeSelect");
+    // Opción para ver el inventario global
     storeSelect.innerHTML = "<option value=''>Inventario: Stock Total</option>";
     snapshot.forEach((docSnap) => {
       const store = docSnap.data();
@@ -89,18 +104,18 @@ async function loadStoreFilter() {
   }
 }
 
-if (loggedUserRole.toLowerCase() === "admin") {
-  document.addEventListener("DOMContentLoaded", () => {
-    loadStoreFilter();
-    document.getElementById("storeSelect").addEventListener("change", function () {
-      currentStore = this.value;
-      document.getElementById("inventoryTitle").textContent = currentStore
-        ? `Inventario de: ${currentStore}`
-        : "Inventario: Stock Total";
-      listenProducts(); // Actualiza la escucha de productos según el filtro
-    });
+// Se asocia la carga del filtro y su evento para TODOS los usuarios
+document.addEventListener("DOMContentLoaded", () => {
+  loadStoreFilter();
+  updateInventoryTitle(); // Título inicial
+  
+  // Cuando se cambia la tienda, se actualiza currentStore y se vuelve a escuchar la colección
+  document.getElementById("storeSelect").addEventListener("change", function () {
+    currentStore = this.value;
+    updateInventoryTitle();
+    listenProducts(); // Actualiza la escucha de productos según el filtro
   });
-}
+});
 
 // Escucha en tiempo real la colección "productos"
 // Se cambia el orden para que se ordene según el "codigo" de producto (ascendente)
@@ -181,18 +196,17 @@ function renderProducts() {
 }
 
 // Calcula el stock a mostrar según rol y tienda
-function getDisplayedStock(product, store = currentStore) {
+function getDisplayedStock(product) {
   if (!product.stock || typeof product.stock !== "object") {
     return product.stock || 0;
   }
-  if (loggedUserRole.toLowerCase() === "admin" && !store) {
+  // Si no se ha seleccionado una tienda, se muestra el total (suma de todos)
+  if (!currentStore) {
     return Object.values(product.stock).reduce((sum, val) => sum + Number(val), 0);
   }
-  if (loggedUserRole.toLowerCase() === "admin" && store) {
-    return product.stock[store] || 0;
-  }
-  return product.stock[store] || 0;
+  return product.stock[currentStore] || 0;
 }
+
 
 // Función para renderizar los controles de paginación con números agrupados en bloques de 5
 function renderPaginationControls(totalItems) {
@@ -494,9 +508,7 @@ async function cargarConCadenaTexto() {
     return;
   }
   // Definir la tienda a utilizar según el rol
-  const storeKey = (loggedUserRole.toLowerCase() === "admin" && currentStore)
-    ? currentStore
-    : loggedUserStore;
+  const storeKey = currentStore || loggedUserStore;
 
   const { value: textData } = await Swal.fire({
     title: "Cargar Productos en Masa",
