@@ -59,7 +59,7 @@ function cargarVentas() {
       let venta = docSnap.data();
       console.log("Venta obtenida:", venta);
       // Comparación insensible a mayúsculas para el método de pago
-      if (venta.metodo_pago && venta.metodo_pago.toLowerCase() === "en línea") {
+      if (venta.metodo_pago && venta.metodo_pago.trim().toLowerCase() === "en línea") {
         ventasEnLinea.push({ id: docSnap.id, ...venta });
       } else {
         console.warn("Venta omitida, método:", venta.metodo_pago);

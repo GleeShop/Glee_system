@@ -22,16 +22,21 @@ export let cart = [];
 let currentPageSales = 1;
 let pageSizeSales = 5;
 
-// Datos del usuario y tienda  
+// Inicialización global de tienda (al inicio del script)
 const usuarioActual = localStorage.getItem("loggedUser") || "admin";
 const loggedUserRole = localStorage.getItem("loggedUserRole") || "";
-// Se espera que window.currentStore esté definido
-export let currentStore = window.currentStore || "";
+let currentStore = localStorage.getItem("loggedUserStore") || window.currentStore || "";
+window.currentStore = currentStore;
 
 // Si el usuario no es Admin, asigna automáticamente la tienda asociada.
 if (loggedUserRole.toLowerCase() !== "admin") {
   currentStore = localStorage.getItem("loggedUserStore") || currentStore;
   window.currentStore = currentStore;
+}
+
+// Validar tienda al cargar la página
+if (loggedUserRole.toLowerCase() !== "admin" && (!currentStore || currentStore.trim() === "")) {
+  Swal.fire("Error", "Tu usuario no tiene una tienda asignada. Contacta al administrador.", "error");
 }
 
 /**
@@ -125,6 +130,37 @@ export function listenProducts() {
   );
 }
 
+// Función para cargar tiendas desde Firestore
+async function cargarTiendas() {
+  const tiendasRef = collection(db, "tiendas");
+  const snapshot = await getDocs(tiendasRef);
+  const select = document.getElementById("storeSelect");
+  select.innerHTML = "<option value=''>Seleccione Tienda</option>";
+
+  snapshot.forEach((docSnap) => {
+    const tienda = docSnap.data();
+
+    // Solo agregar tiendas activas (enabled == true)
+    if (tienda.enabled) {
+      const nombreTienda = tienda.nombre || "(Sin nombre)";
+      const option = document.createElement("option");
+      option.value = nombreTienda;
+      option.textContent = nombreTienda;
+      select.appendChild(option);
+    }
+  });
+
+  // Si el usuario no es admin, asigna automáticamente la tienda del usuario
+  if (loggedUserRole.toLowerCase() !== "admin") {
+    select.value = currentStore;
+    select.disabled = true;
+  } else {
+    select.disabled = false;
+  }
+  // Renderiza productos una vez cargadas las tiendas
+  renderProducts();
+}
+
 /**
  * Renderiza los productos en el nodo "productsBody".
  * Se filtran por búsqueda, talla; se ordenan de mayor a menor stock (para la tienda actual)
@@ -142,6 +178,8 @@ export function renderProducts() {
     }
   }
   
+  document.addEventListener("DOMContentLoaded", cargarTiendas);
+
   const searchQuery = (document.getElementById("searchInput")?.value || "").toLowerCase();
   const sizeFilter = (document.getElementById("sizeFilter")?.value || "").toLowerCase();
   const tbody = document.getElementById("productsBody");
@@ -382,17 +420,24 @@ export async function procesarVenta() {
     Swal.fire("Error", "Debes abrir la caja antes de vender.", "warning");
     return;
   }
+  
   const storeSelect = document.getElementById("storeSelect");
   if (storeSelect) {
     currentStore = storeSelect.value;
     window.currentStore = currentStore;
   }
 
+  if (!currentStore || currentStore.trim() === "") {
+    Swal.fire("Error", "La tienda no está definida. Asegúrate de seleccionar la tienda correspondiente.", "error");
+    return;
+  }
+  
   if (cart.length === 0) {
     Swal.fire("Carrito vacío", "", "warning");
     return;
   }
 
+  
   // 1) Código de Empleado
   const { value: empCodigo } = await Swal.fire({
     title: "Código de Empleado",
@@ -993,13 +1038,13 @@ window.renderCart = renderCart;
 window.listenProducts = listenProducts;
 
 document.addEventListener("DOMContentLoaded", () => {
+  cargarTiendas(); // <- Llamar aquí
+  listenProducts();
+  crearSidebarCaja();
+
   const storeSelect = document.getElementById("storeSelect");
   if (storeSelect) {
     storeSelect.addEventListener("change", renderProducts);
-    if (loggedUserRole.toLowerCase() !== "admin") {
-      storeSelect.value = currentStore;
-      storeSelect.disabled = true;
-    }
   }
 
   const searchInput = document.getElementById("searchInput");
@@ -1011,7 +1056,5 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sizeFilter) {
     sizeFilter.addEventListener("change", renderProducts);
   }
-
-  listenProducts();
-  crearSidebarCaja();
 });
+

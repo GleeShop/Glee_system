@@ -173,7 +173,7 @@ window.deleteEmpleado = async function (id) {
   if (!isAdmin) return;
   const result = await Swal.fire({
     title: "¿Está seguro?",
-    text: "Esta acción eliminará el empleado de forma permanente.",
+    text: "Esta acción eliminará al vendedor de forma permanente.",
     icon: "warning",
     showCancelButton: true,
     confirmButtonText: "Sí, eliminar",
@@ -182,10 +182,10 @@ window.deleteEmpleado = async function (id) {
   if (!result.isConfirmed) return;
   try {
     await deleteDoc(doc(db, "empleados", id));
-    Swal.fire("Éxito", "Empleado eliminado.", "success");
+    Swal.fire("Éxito", "Vendedor eliminado.", "success");
   } catch (error) {
-    console.error("Error al eliminar empleado:", error);
-    Swal.fire("Error", "Error al eliminar empleado: " + error.message, "error");
+    console.error("Error al eliminar vendedor:", error);
+    Swal.fire("Error", "Error al eliminar vendedor: " + error.message, "error");
   }
 };
 
@@ -193,7 +193,7 @@ window.toggleEmpleado = async function (id, currentStatus) {
   if (!isAdmin) return;
   try {
     await updateDoc(doc(db, "empleados", id), { enabled: !currentStatus });
-    Swal.fire("Éxito", "Estado del empleado actualizado.", "success");
+    Swal.fire("Éxito", "Estado del vendedor actualizado.", "success");
   } catch (error) {
     console.error("Error al actualizar estado:", error);
     Swal.fire("Error", "Error al actualizar estado: " + error.message, "error");
@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnCrearEmpleado").addEventListener("click", () => {
       document.getElementById("empleadoForm").reset();
       document.getElementById("empleadoId").value = "";
-      document.getElementById("empleadoModalLabel").textContent = "Crear Empleado";
+      document.getElementById("empleadoModalLabel").textContent = "Crear Vendedor";
       empleadoModal.show();
     });
   }
