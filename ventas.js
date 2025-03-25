@@ -13,7 +13,6 @@ import {
   addDoc,
   limit
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-import { processPreventaPayment } from "./preventa.js"; // Asegúrate de que en preventa.js exportes esta función.
 
 
 // Variables globales para Ventas
@@ -826,52 +825,7 @@ export async function procesarVenta() {
   }
 }
 
-// Función stub para la preventa
-export async function procesarPreventa() {
-  Swal.fire("Preventa", "Funcionalidad de preventa no implementada.", "info");
-}
-
-async function procesarPreventaFlow() {
-  // 1. Solicitar el código del cliente
-  const { value: clientCode } = await Swal.fire({
-    title: "Código del Cliente",
-    input: "text",
-    inputPlaceholder: "Ingrese el código del cliente",
-    preConfirm: () => {
-      const code = Swal.getInput().value.trim();
-      if (!code) {
-        Swal.showValidationMessage("El código es obligatorio");
-      }
-      return code;
-    }
-  });
-  if (!clientCode) return;
-
-  // 2. Buscar en la colección "preventas" para verificar el registro del cliente
-  try {
-    const preventasRef = collection(db, "preventas");
-    const q = query(preventasRef, where("codigoCliente", "==", clientCode.toUpperCase()));
-    const snapshot = await getDocs(q);
-  
-    if (snapshot.empty) {
-      Swal.fire("No encontrado", "No se encontró una preventa para ese cliente.", "error");
-      return;
-    }
-  
-    // 3. Llamar a la función de procesamiento de pago de preventa
-    await processPreventaPayment(clientCode);
-  
-    Swal.fire("Proceso completado", "La preventa se procesó correctamente.", "success");
-  } catch (error) {
-    console.error("Error al procesar preventa:", error);
-    Swal.fire("Error", "Ocurrió un error al buscar la preventa.", "error");
-  }
-}
-
-
 window.procesarVenta = procesarVenta;
-window.procesarPreventa = procesarPreventa;
-window.procesarPreventa = procesarPreventaFlow;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
@@ -1076,8 +1030,80 @@ document.body.appendChild(toggleBtn);
   document.body.appendChild(sidebar);
 }
 
+// REDIRIJE EL BOTON A TABLA PREVENTAS
+
+// Se asigna la función al objeto window para que sea global
+window.procesarModalPreventa = async function() {
+  console.log("procesarModalPreventa llamada");
+  console.log("window.cajaAbierta:", window.cajaAbierta);
+  console.log("window.idAperturaActivo:", window.idAperturaActivo);
+
+  if (!window.cajaAbierta || !window.idAperturaActivo) {
+    Swal.fire("Error", "Debes abrir la caja antes de ver las preventas.", "warning");
+    return;
+  }
+
+  // Si el ancho de pantalla es menor a 768px, mostrar listado en modal
+  if (window.innerWidth < 10000) {
+    console.log("Pantalla pequeña detectada. Ancho:", window.innerWidth);
+    // Define la consulta localmente
+    const ventasRef = collection(db, "ventas");
+    const preventasQuery = query(
+      ventasRef,
+      where("tipoVenta", "==", "preventa"),
+      orderBy("fecha", "desc")
+    );
+    console.log("Realizando consulta de preventas...");
+    try {
+      const querySnapshot = await getDocs(preventasQuery);
+      console.log("Total de preventas encontradas:", querySnapshot.size);
+      
+      const pendingPreventas = [];
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const saldo = (data.saldo_pendiente !== undefined)
+                        ? data.saldo_pendiente 
+                        : (data.total - (data.montoAbono || 0));
+        // Solo agregar si el saldo es mayor a 0
+        if (saldo > 0) {
+          pendingPreventas.push({ id: docSnap.id, ...data, saldo });
+        }
+      });
+      console.log("Preventas pendientes:", pendingPreventas);
+      
+      if (pendingPreventas.length === 0) {
+        Swal.fire("Información", "No hay preventas pendientes.", "info");
+        return;
+      }
+      
+      let listHtml = '<ul style="text-align:left;">';
+      pendingPreventas.forEach(item => {
+        const cliente = item.cliente ? (item.cliente.nombre || item.cliente) : "N/A";
+        const codigo = item.codigo || "N/A";
+        listHtml += `<li><strong>${cliente}</strong> - Código: ${codigo} - Saldo: Q${item.saldo.toFixed(2)}</li>`;
+      });
+      listHtml += '</ul>';
+      
+      Swal.fire({
+        title: "Preventas Pendientes",
+        html: listHtml,
+        width: "90%",
+        confirmButtonText: "Cerrar"
+      });
+    } catch (error) {
+      console.error("Error al obtener preventas:", error);
+      Swal.fire("Error", "Ocurrió un error al obtener las preventas.", "error");
+    }
+  } else {
+    // En pantallas grandes, hacer scroll a la tabla
+    console.log("Pantalla grande. Se hará scroll a la tabla.");
+    document.querySelector("table").scrollIntoView({ behavior: "smooth" });
+  }
+};
+
+
+
 window.procesarVenta = procesarVenta;
-window.procesarPreventa = procesarPreventa;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
@@ -1102,4 +1128,3 @@ document.addEventListener("DOMContentLoaded", () => {
     sizeFilter.addEventListener("change", renderProducts);
   }
 });
-

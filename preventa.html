@@ -28,12 +28,7 @@
   <body>
     <div class="container my-4">
       <h1 class="text-center">Gestión de Preventas - Tienda de Ropa</h1>
-      <div class="mb-3">
-        <!-- Botón para buscar preventa por código -->
-        <button class="btn btn-info" data-toggle="modal" data-target="#buscarVentaModal">
-          <i class="fa fa-search"></i> Ingresar Código de Preventa
-        </button>
-      </div>
+    
       <!-- Tabla de preventas -->
       <table class="table table-bordered">
         <thead class="thead-dark">
@@ -186,14 +181,15 @@
 
         // Observamos cambios en tiempo real
         onSnapshot(preventasQuery, (snapshot) => {
-          // Limpiamos antes de volver a recorrer
           tbody.innerHTML = "";
-
           snapshot.forEach((docSnap) => {
             const preventa = docSnap.data();
-            let estado = preventa.estado || ((preventa.saldo_pendiente !== undefined
-              ? preventa.saldo_pendiente
-              : (preventa.total - (preventa.montoAbono || 0))) > 0 ? "Pendiente" : "Pagado");
+            let estado = preventa.estado || (
+              (preventa.saldo_pendiente !== undefined
+                ? preventa.saldo_pendiente
+                : (preventa.total - (preventa.montoAbono || 0))
+              ) > 0 ? "Pendiente" : "Pagado"
+            );
             const cliente = preventa.cliente ? (preventa.cliente.nombre || preventa.cliente) : "N/A";
             const total = preventa.total || 0;
             const abono = preventa.montoAbono || 0;
@@ -206,10 +202,7 @@
             const fechaPrevent = preventa.fecha ? formatDate(preventa.fecha) : "N/A";
             const fechaPagoFinal = preventa.fecha_pago_final ? formatDate(preventa.fecha_pago_final) : "N/A";
 
-            // ================================
-            // 2) MOSTRAR BOTONES CONDICIONALES
-            // ================================
-            // Creamos la fila
+            // Creamos la fila con botones condicionales
             const tr = document.createElement("tr");
             tr.innerHTML = `
               <td>${cliente}</td>
@@ -223,31 +216,20 @@
               <td>${fechaPrevent}</td>
               <td>${fechaPagoFinal}</td>
               <td>
-                <!-- Botón ver detalles (siempre visible) -->
                 <button class="btn btn-sm btn-info" onclick="verDetallesPreventa('${docSnap.id}')">
                   <i class="fa fa-eye"></i>
                 </button>
-
-                <!-- Botón "Anular" (solo se muestra si esAdmin) -->
                 ${ isAdmin ? `
                   <button class="btn btn-sm btn-warning" onclick="anularPreventa('${docSnap.id}')">
                     <i class="fa fa-ban"></i>
                   </button>
-                ` : "" }
-
-                <!-- Botón "Eliminar" (solo se muestra si esAdmin) -->
-                ${ isAdmin ? `
                   <button class="btn btn-sm btn-danger" onclick="eliminarPreventa('${docSnap.id}')">
                     <i class="fa fa-trash"></i>
                   </button>
                 ` : "" }
-                
-                <!-- Botón descargar comprobante (siempre visible) -->
                 <button class="btn btn-sm btn-secondary" onclick="descargarComprobantePreventa('${docSnap.id}')">
                   <i class="fa fa-download"></i>
                 </button>
-
-                <!-- Botón para completar pago si aún hay saldo pendiente -->
                 ${ (saldo > 0 && estado.toLowerCase() === "pendiente") ? 
                   `<button class="btn btn-sm btn-success" onclick="openPagoModalPreventas('${docSnap.id}', ${total}, ${abono}, ${saldo})">
                     <i class="fa fa-check"></i>
@@ -260,6 +242,12 @@
         });
       }
       renderPreventas();
+      
+      // Función que se activa al hacer clic en el botón "Preventas"
+      function procesarModalPreventa() {
+        // En este ejemplo se hace scroll hacia la tabla. Si prefieres redirigir a otra página, usa window.location.href.
+        document.querySelector("table").scrollIntoView({behavior: "smooth"});
+      }
       
       // Abre el modal de pago mostrando Total, Abono Inicial y Saldo Pendiente
       window.openPagoModalPreventas = function(preventaId, total, abono, saldo) {
@@ -282,7 +270,22 @@
         }
       });
       
-      // Al enviar el formulario de pago, se actualiza el mismo documento
+      // Función para agregar la venta al carrito (utilizando los datos de la preventa)
+      function agregarVentaAlCarrito(preventaData, montoPago, metodoPago) {
+        // Se crea un objeto con la información de la venta que se agregará al carrito.
+        // Aquí puedes integrarlo con tu lógica actual (por ejemplo, agregándolo a un array global o insertándolo en Firestore).
+        const nuevaVenta = {
+          idPreventa: window.currentPreventaId,
+          productos: preventaData.productos,
+          total: montoPago, // El total de la venta es el monto abonado
+          metodoPago: metodoPago,
+          fecha: new Date().toISOString()
+        };
+        console.log("Venta agregada al carrito:", nuevaVenta);
+        Swal.fire("Venta Agregada", "La venta se agregó al carrito de ventas.", "success");
+      }
+      
+      // Al enviar el formulario de pago, se actualiza el documento de la preventa y se agrega la venta al carrito
       document.getElementById("pagoFinalForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const montoPago = parseFloat(document.getElementById("monto_pago_final").value);
@@ -323,6 +326,8 @@
         }
         try {
           await updateDoc(preventaDocRef, updateData);
+          // Se agrega la venta al carrito usando el monto abonado y el método de pago
+          agregarVentaAlCarrito(preventaData, montoPago, metodoPago);
           Swal.fire("Pago Registrado", "El pago ha sido registrado correctamente.", "success");
           $('#pagoModal').modal('hide');
         } catch (error) {
@@ -365,7 +370,6 @@
         detallesHTML += `<div><strong>Usuario:</strong> ${preventa.usuario || "N/A"}</div>`;
         detallesHTML += `<div><strong>Fecha Preventa:</strong> ${preventa.fecha ? formatDate(preventa.fecha) : "N/A"}</div>`;
         detallesHTML += `<div><strong>Fecha Pago Final:</strong> ${preventa.fecha_pago_final ? formatDate(preventa.fecha_pago_final) : "N/A"}</div>`;
-        
         // Mostrar productos en una tabla
         detallesHTML += `<hr><h5>Productos</h5>`;
         if (preventa.productos && preventa.productos.length > 0) {
