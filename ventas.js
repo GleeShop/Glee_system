@@ -1,4 +1,5 @@
 // ventas.js - Gestión de Ventas
+
 import { db } from "./firebase-config.js";
 import {
   collection,
@@ -10,9 +11,11 @@ import {
   writeBatch,
   onSnapshot,
   where,
-  addDoc,
   limit
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+// Importamos la lógica de preventa
+import { handlePreventa } from "./preventa.js";
 
 // Variables globales para Ventas
 let productos = [];
@@ -50,31 +53,6 @@ export async function generarIdVentaCorta() {
   } catch (error) {
     console.error("Error generando ID de venta:", error);
     return Math.floor(Math.random() * 9000) + 1000;
-  }
-}
-
-/**
- * Formatea una fecha a dd/mm/yyyy
- */
-export function formatDate(date) {
-  const d = date.getDate().toString().padStart(2, "0");
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const y = date.getFullYear();
-  return `${d}/${m}/${y}`;
-}
-
-/**
- * Parsea una cadena de fecha en formato dd/mm/yyyy a un objeto Date
- */
-export function parseDate(dateStr) {
-  if (dateStr.indexOf("/") > -1) {
-    const parts = dateStr.split("/");
-    const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const year = parseInt(parts[2], 10);
-    return new Date(year, month, day);
-  } else {
-    return new Date(dateStr);
   }
 }
 
@@ -125,7 +103,6 @@ export function listenProducts() {
 
 /**
  * Renderiza los productos en el nodo "productsBody".
- * Se asume que en el HTML existen elementos con IDs "searchInput", "sizeFilter" y "productsBody".
  */
 export function renderProducts() {
   const storeSelect = document.getElementById("storeSelect");
@@ -255,27 +232,8 @@ export function renderCart() {
 }
 
 /**
- * Función auxiliar para renderizar el resumen de venta (detalle de productos)
- * que se usará en los formularios de venta.
- */
-function renderCartSummary() {
-  let total = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
-  let resumenHtml = "";
-  cart.forEach(item => {
-    let subt = item.cantidad * item.precio;
-    resumenHtml += `
-      <p><strong>${item.producto}</strong> (${item.producto_codigo})<br>
-         Cant: ${item.cantidad} x Q${item.precio.toFixed(2)} = Q${subt.toFixed(2)}</p>
-    `;
-  });
-  resumenHtml += `<h4>Venta Total: Q${total.toFixed(2)}</h4>`;
-  return resumenHtml;
-}
-
-/**
- * Procesa la venta: verifica que haya caja abierta, genera el objeto venta,
- * actualiza stock y registra la venta. Se relaciona la venta con la apertura activa
- * usando window.idAperturaActivo.
+ * Procesa la venta. Verifica que haya caja abierta, solicita tipo de venta y datos, 
+ * actualiza stock y registra la venta en Firestore.
  */
 export async function procesarVenta() {
   if (!window.cajaAbierta || !window.idAperturaActivo) {
@@ -308,115 +266,15 @@ export async function procesarVenta() {
   });
   if (!saleCategory) return;
   
-  let formData;
-  // Rama para Preventa
-  if (saleCategory === "preventa") {
-    // Solicitar el código del cliente
-    const { value: clientCode } = await Swal.fire({
-      title: "Código del Cliente",
-      input: "text",
-      inputLabel: "Ingrese el código del cliente",
-      inputPlaceholder: "Código del cliente",
-      preConfirm: () => {
-        const code = Swal.getInput().value.trim();
-        if (!code) {
-          Swal.showValidationMessage("El código es obligatorio");
-          return;
-        }
-        return code;
-      }
-    });
-    if (!clientCode) return;
-    let clientName = clientCode; // Se usa el mismo código como nombre por ahora
+  let formData = null;
 
-    // Mostrar formulario similar al de venta física, pero con campo "Monto de Abono"
-    const result = await Swal.fire({
-      title: "Procesar Venta - Preventa",
-      html: `
-        <h4>Datos del Cliente</h4>
-        <input type="text" id="clienteNombre" class="swal2-input" placeholder="Nombre y Apellido" value="${clientName}">
-        <input type="text" id="clienteTelefono" class="swal2-input" placeholder="Teléfono">
-        <input type="email" id="clienteCorreo" class="swal2-input" placeholder="Correo (opc)">
-        <input type="text" id="clienteDireccion" class="swal2-input" placeholder="Dirección (opc)">
-        <hr>
-        <h4>Detalle de la Venta</h4>
-        ${renderCartSummary()}
-        <select id="metodoPago" class="swal2-select">
-          <option value="Efectivo">Efectivo</option>
-          <option value="Tarjeta">Tarjeta</option>
-          <option value="Transferencia">Transferencia</option>
-        </select>
-        <div id="pagoEfectivoContainer">
-          <input type="number" id="montoAbono" class="swal2-input" placeholder="Monto de Abono (Q)">
-        </div>
-        <div id="numeroTransferenciaContainer" style="display: none;">
-          <input type="text" id="numeroTransferencia" class="swal2-input" placeholder="Número de Referencia">
-        </div>
-      `,
-      focusConfirm: false,
-      preConfirm: () => {
-        const nombre = document.getElementById("clienteNombre").value.trim();
-        const telefono = document.getElementById("clienteTelefono").value.trim();
-        if (!nombre) {
-          Swal.showValidationMessage("El nombre es obligatorio");
-          return;
-        }
-        if (!telefono) {
-          Swal.showValidationMessage("El teléfono es obligatorio");
-          return;
-        }
-        let clienteData = {
-          nombre,
-          telefono,
-          correo: document.getElementById("clienteCorreo").value.trim(),
-          direccion: document.getElementById("clienteDireccion").value.trim()
-        };
-        let metodo = document.getElementById("metodoPago").value;
-        let pagoObj = { metodo };
-        if (metodo === "Efectivo") {
-          let montoAbono = parseFloat(document.getElementById("montoAbono").value) || 0;
-          if (montoAbono <= 0) {
-            Swal.showValidationMessage("El monto de abono debe ser mayor a 0");
-            return;
-          }
-          let totalSale = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
-          if (montoAbono > totalSale) {
-            Swal.showValidationMessage("El monto de abono no puede ser mayor al total de la venta");
-            return;
-          }
-          pagoObj.montoAbono = montoAbono;
-        }
-        if (metodo === "Transferencia") {
-          let numTransferencia = document.getElementById("numeroTransferencia").value.trim();
-          if (!numTransferencia) {
-            Swal.showValidationMessage("Ingrese el número de Referencia");
-            return;
-          }
-          pagoObj.numeroTransferencia = numTransferencia;
-        }
-        return { clienteData, pagoObj };
-      },
-      didOpen: () => {
-        const metodoSelect = document.getElementById("metodoPago");
-        const efectivoContEl = document.getElementById("pagoEfectivoContainer");
-        const transferenciaContEl = document.getElementById("numeroTransferenciaContainer");
-        metodoSelect.addEventListener("change", function () {
-          if (this.value === "Efectivo") {
-            efectivoContEl.style.display = "block";
-            transferenciaContEl.style.display = "none";
-          } else if (this.value === "Transferencia") {
-            efectivoContEl.style.display = "none";
-            transferenciaContEl.style.display = "block";
-          } else {
-            efectivoContEl.style.display = "none";
-            transferenciaContEl.style.display = "none";
-          }
-        });
-      }
-    });
-    formData = result.value;
+  // ---- RAMA PREVENTA ----
+  if (saleCategory === "preventa") {
+    formData = await handlePreventa(cart);
+    if (!formData) return; // Usuario canceló
   }
-  // Rama para Venta Física
+
+  // ---- VENTA FÍSICA ----
   else if (saleCategory === "fisico") {
     const { value: empCodigo } = await Swal.fire({
       title: "Código del Empleado",
@@ -453,14 +311,29 @@ export async function procesarVenta() {
         <input type="text" id="clienteDireccion" class="swal2-input" placeholder="Dirección (opc)">
         <hr>
         <h4>Detalle de la Venta</h4>
-        ${renderCartSummary()}
+        <!-- Resumen textual del carrito -->
+        ${(() => {
+          let total = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
+          let resumenHtml = "";
+          cart.forEach(item => {
+            let subt = item.cantidad * item.precio;
+            resumenHtml += `
+              <p><strong>${item.producto}</strong> (${item.producto_codigo})<br>
+                 Cant: ${item.cantidad} x Q${item.precio.toFixed(2)} = Q${subt.toFixed(2)}</p>
+            `;
+          });
+          resumenHtml += `<h4>Venta Total: Q${total.toFixed(2)}</h4>`;
+          return resumenHtml;
+        })()}
         <select id="metodoPago" class="swal2-select">
           <option value="Efectivo">Efectivo</option>
           <option value="Tarjeta">Tarjeta</option>
           <option value="Transferencia">Transferencia</option>
         </select>
         <div id="pagoEfectivoContainer">
-          <input type="number" id="montoRecibido" class="swal2-input" value="${parseFloat(document.getElementById("totalVenta")?.textContent || "0")}" placeholder="Monto recibido (Q)">
+          <input type="number" id="montoRecibido" class="swal2-input" 
+                 value="${parseFloat(document.getElementById("totalVenta")?.textContent || "0")}"
+                 placeholder="Monto recibido (Q)">
         </div>
         <div id="numeroTransferenciaContainer" style="display: none;">
           <input type="text" id="numeroTransferencia" class="swal2-input" placeholder="Número de Referencia">
@@ -482,18 +355,20 @@ export async function procesarVenta() {
           nombre,
           telefono,
           correo: document.getElementById("clienteCorreo").value.trim(),
-          direccion: document.getElementById("clienteDireccion").value.trim()
+          direccion: document.getElementById("clienteDireccion").value.trim(),
+          empNombre  
         };
         let metodo = document.getElementById("metodoPago").value;
+        let totalVentaNum = parseFloat(document.getElementById("totalVenta").textContent) || 0;
         let pagoObj = { metodo };
         if (metodo === "Efectivo") {
           let montoRecibido = parseFloat(document.getElementById("montoRecibido").value) || 0;
-          if (montoRecibido < parseFloat(document.getElementById("totalVenta").textContent)) {
+          if (montoRecibido < totalVentaNum) {
             Swal.showValidationMessage("Monto insuficiente para cubrir el total");
             return;
           }
           pagoObj.montoRecibido = montoRecibido;
-          pagoObj.cambio = montoRecibido - parseFloat(document.getElementById("totalVenta").textContent);
+          pagoObj.cambio = montoRecibido - totalVentaNum;
         }
         if (metodo === "Transferencia") {
           let numTransferencia = document.getElementById("numeroTransferencia").value.trim();
@@ -524,9 +399,9 @@ export async function procesarVenta() {
       }
     });
     formData = result.value;
-    formData.clienteData.empNombre = empNombre;
   }
-  // Rama para Venta en Línea
+
+  // ---- VENTA EN LÍNEA ----
   else if (saleCategory === "online") {
     const result = await Swal.fire({
       title: "Procesar Venta - En Línea",
@@ -538,7 +413,19 @@ export async function procesarVenta() {
         <input type="text" id="clienteDireccion" class="swal2-input" placeholder="Dirección (opc)">
         <hr>
         <h4>Detalle de la Venta</h4>
-        ${renderCartSummary()}
+        ${(() => {
+          let total = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
+          let resumenHtml = "";
+          cart.forEach(item => {
+            let subt = item.cantidad * item.precio;
+            resumenHtml += `
+              <p><strong>${item.producto}</strong> (${item.producto_codigo})<br>
+                 Cant: ${item.cantidad} x Q${item.precio.toFixed(2)} = Q${subt.toFixed(2)}</p>
+            `;
+          });
+          resumenHtml += `<h4>Venta Total: Q${total.toFixed(2)}</h4>`;
+          return resumenHtml;
+        })()}
         <input type="text" id="comprobantePago" class="swal2-input" placeholder="Comprobante de Pago">
         <textarea id="comentarioVenta" class="swal2-textarea" placeholder="Comentario (opcional)"></textarea>
       `,
@@ -576,9 +463,10 @@ export async function procesarVenta() {
     formData = result.value;
   }
   
+  // Si se canceló la operación o no hay datos, salimos
   if (!formData) return;
   
-  // Construir la venta, asociándola a la apertura activa (idApertura = window.idAperturaActivo)
+  // Guardar la venta en Firestore (actualizar stock, etc.)
   let totalVenta = parseFloat(document.getElementById("totalVenta").textContent) || 0;
   let venta = {
     idVenta: await generarIdVentaCorta(),
@@ -603,12 +491,12 @@ export async function procesarVenta() {
     tipoVenta: saleCategory
   };
 
-  // Asignar el código de venta o preventa según el tipo
+  // Asignar el código de venta o preventa
   venta.codigo = saleCategory === "preventa" ? "PREV-" + venta.idVenta : "VENTA-" + venta.idVenta;
 
   console.log("Venta a registrar:", venta);
 
-  // Actualizar stock mediante batch
+  // Actualizar stock en batch
   const batch = writeBatch(db);
   for (let item of cart) {
     let prodRef = doc(db, "productos", item.productId);
@@ -644,34 +532,15 @@ export async function procesarVenta() {
   }
 }
 
-// Función stub para la preventa (se mantiene en caso de necesitarse en el futuro)
-export async function procesarPreventa() {
-  Swal.fire("Preventa", "Funcionalidad de preventa no implementada.", "info");
-}
-
-// Exponer funciones globalmente para uso en HTML u otros módulos
+// Exponer algunas funciones globalmente para uso en HTML u otros módulos
 window.procesarVenta = procesarVenta;
-window.procesarPreventa = procesarPreventa;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const storeSelect = document.getElementById("storeSelect");
-  if (storeSelect) {
-    storeSelect.addEventListener("change", renderProducts);
-  }
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) {
-    searchInput.addEventListener("input", renderProducts);
-  }
-  const sizeFilter = document.getElementById("sizeFilter");
-  if (sizeFilter) {
-    sizeFilter.addEventListener("change", renderProducts);
-  }
-  listenProducts();
-});
-
+/**
+ * Función para descargar el comprobante en HTML.
+ */
 window.descargarComprobante = function(venta) {
   let comprobanteHtml = `
     <h2>Comprobante de Venta</h2>
@@ -697,7 +566,7 @@ window.descargarComprobante = function(venta) {
   `;
   if (venta.tipoVenta === "preventa") {
     let montoAbono = venta.montoAbono || 0;
-    let pendiente = venta.total - montoAbono;
+    let pendiente = venta.total ? (venta.total - montoAbono) : 0;
     comprobanteHtml += `
       <p><strong>Abono:</strong> Q${montoAbono.toFixed(2)}</p>
       <p><strong>Monto Pendiente:</strong> Q${pendiente.toFixed(2)}</p>
@@ -713,10 +582,33 @@ window.descargarComprobante = function(venta) {
   document.body.removeChild(a);
 };
 
+// --------------------------------------------------------------
+// Bloquear selección de tienda si no es admin (MOVIDO DEL HTML)
+// --------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
+  // Ya hay código para storeSelect.addEventListener("change", renderProducts);
+  // Agregamos este nuevo bloque para restringir si no es admin:
+  const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
+  const loggedUserStore = localStorage.getItem("loggedUserStore") || "";
+  
+  // Si NO es admin, se asigna la tienda del usuario y se deshabilita el <select>
+  if (loggedUserRole !== "admin" && storeSelect) {
+    storeSelect.value = loggedUserStore;
+    storeSelect.disabled = true;
+  }
+
+  // Ya existente: 
   if (storeSelect) {
     storeSelect.addEventListener("change", renderProducts);
+  }
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", renderProducts);
+  }
+  const sizeFilter = document.getElementById("sizeFilter");
+  if (sizeFilter) {
+    sizeFilter.addEventListener("change", renderProducts);
   }
   listenProducts();
 });

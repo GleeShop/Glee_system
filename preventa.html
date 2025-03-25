@@ -151,6 +151,12 @@
       // Importa la configuración de Firebase desde tu archivo firebase-config.js
       import { db } from "./firebase-config.js";
       
+      // ================================
+      // 1) VERIFICAR ROL (isAdmin)
+      // ================================
+      const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
+      const isAdmin = loggedUserRole === "admin";
+
       // Referencia a la colección "ventas" (donde se registran las preventas)
       const ventasRef = collection(db, "ventas");
       // Consulta para obtener solo las preventas (tipoVenta == "preventa") ordenadas por fecha descendente
@@ -177,7 +183,12 @@
       function renderPreventas() {
         const tbody = document.getElementById("preventasTableBody");
         tbody.innerHTML = ""; // Limpia la tabla
+
+        // Observamos cambios en tiempo real
         onSnapshot(preventasQuery, (snapshot) => {
+          // Limpiamos antes de volver a recorrer
+          tbody.innerHTML = "";
+
           snapshot.forEach((docSnap) => {
             const preventa = docSnap.data();
             let estado = preventa.estado || ((preventa.saldo_pendiente !== undefined
@@ -194,6 +205,11 @@
             const numTransf = preventa.numeroTransferencia || "N/A";
             const fechaPrevent = preventa.fecha ? formatDate(preventa.fecha) : "N/A";
             const fechaPagoFinal = preventa.fecha_pago_final ? formatDate(preventa.fecha_pago_final) : "N/A";
+
+            // ================================
+            // 2) MOSTRAR BOTONES CONDICIONALES
+            // ================================
+            // Creamos la fila
             const tr = document.createElement("tr");
             tr.innerHTML = `
               <td>${cliente}</td>
@@ -207,19 +223,32 @@
               <td>${fechaPrevent}</td>
               <td>${fechaPagoFinal}</td>
               <td>
+                <!-- Botón ver detalles (siempre visible) -->
                 <button class="btn btn-sm btn-info" onclick="verDetallesPreventa('${docSnap.id}')">
                   <i class="fa fa-eye"></i>
                 </button>
-                <button class="btn btn-sm btn-warning" onclick="anularPreventa('${docSnap.id}')">
-                  <i class="fa fa-ban"></i>
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="eliminarPreventa('${docSnap.id}')">
-                  <i class="fa fa-trash"></i>
-                </button>
+
+                <!-- Botón "Anular" (solo se muestra si esAdmin) -->
+                ${ isAdmin ? `
+                  <button class="btn btn-sm btn-warning" onclick="anularPreventa('${docSnap.id}')">
+                    <i class="fa fa-ban"></i>
+                  </button>
+                ` : "" }
+
+                <!-- Botón "Eliminar" (solo se muestra si esAdmin) -->
+                ${ isAdmin ? `
+                  <button class="btn btn-sm btn-danger" onclick="eliminarPreventa('${docSnap.id}')">
+                    <i class="fa fa-trash"></i>
+                  </button>
+                ` : "" }
+                
+                <!-- Botón descargar comprobante (siempre visible) -->
                 <button class="btn btn-sm btn-secondary" onclick="descargarComprobantePreventa('${docSnap.id}')">
                   <i class="fa fa-download"></i>
                 </button>
-                ${ saldo > 0 && estado.toLowerCase() === "pendiente" ? 
+
+                <!-- Botón para completar pago si aún hay saldo pendiente -->
+                ${ (saldo > 0 && estado.toLowerCase() === "pendiente") ? 
                   `<button class="btn btn-sm btn-success" onclick="openPagoModalPreventas('${docSnap.id}', ${total}, ${abono}, ${saldo})">
                     <i class="fa fa-check"></i>
                   </button>` 
@@ -253,7 +282,7 @@
         }
       });
       
-      // Al enviar el formulario de pago, se actualiza el mismo documento (sin duplicar la fila)
+      // Al enviar el formulario de pago, se actualiza el mismo documento
       document.getElementById("pagoFinalForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const montoPago = parseFloat(document.getElementById("monto_pago_final").value);
@@ -302,7 +331,7 @@
         }
       });
       
-      // Función para ver detalles completos de la preventa, mostrando los productos en una tabla y el historial de pagos
+      // Función para ver detalles completos de la preventa
       window.verDetallesPreventa = async function(id) {
         const qDetalle = query(ventasRef, where("__name__", "==", id));
         const snapshot = await getDocs(qDetalle);
@@ -367,7 +396,7 @@
           detallesHTML += `<p>No hay productos.</p>`;
         }
         
-        // Mostrar historial de pagos (anticipo y abonos)
+        // Mostrar historial de pagos
         let historialArray = preventa.historial_pagos ? [...preventa.historial_pagos] : [];
         if (preventa.montoAbono && !historialArray.some(p => Number(p.monto) === Number(preventa.montoAbono))) {
           historialArray.unshift({
@@ -476,7 +505,7 @@
         }
       };
       
-      // Función para descargar el comprobante de preventa con todos los datos
+      // Función para descargar el comprobante de preventa
       window.descargarComprobantePreventa = async function(id) {
         const docRef = doc(db, "ventas", id);
         const docSnap = await getDoc(docRef);
