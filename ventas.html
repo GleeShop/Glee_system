@@ -72,6 +72,18 @@
               <option value="XL">XL</option>
             </select>
           </div>
+           <!-- Selector para cantidad de productos por página -->
+           <div class="mb-3">
+            <label for="pageSizeSelect" class="form-label">Productos por página:</label>
+            <select id="pageSizeSelect" class="form-select" onchange="updatePageSize()">
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+            </select>
+          </div>
           <table class="table table-bordered" id="productsTable">
             <thead class="table-light">
               <tr>
@@ -87,18 +99,7 @@
               <!-- Los productos se renderizarán dinámicamente -->
             </tbody>
           </table>
-          <!-- Selector para cantidad de productos por página -->
-          <div class="mb-3">
-            <label for="pageSizeSelect" class="form-label">Productos por página:</label>
-            <select id="pageSizeSelect" class="form-select" onchange="updatePageSize()">
-              <option value="5" selected>5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-              <option value="20">20</option>
-              <option value="25">25</option>
-              <option value="30">30</option>
-            </select>
-          </div>
+         
         </div>
       </div>
     </div>

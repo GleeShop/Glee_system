@@ -802,7 +802,7 @@ window.updatePageSize = updatePageSize;
 export function renderSidebarCart() {
   const sidebarCartContainer = document.getElementById("sidebarCart");
   if (!sidebarCartContainer) return;
-  let html = `<h2>Carrito de Venta</h2>`;
+  let html = `<h2> <img src="img/carro.png" style="width:20px; margin-right:5px;"></h2>`;
   if (cart.length === 0) {
     html += `<p>El carrito está vacío.</p>`;
   } else {
@@ -955,20 +955,30 @@ function crearSidebarCaja() {
   `;
   document.head.appendChild(style);
 
-  // Crear el botón para abrir/cerrar sidebar
-  const toggleBtn = document.createElement("button");
-  toggleBtn.id = "sidebarToggle";
-  toggleBtn.textContent = "Mostrar Carrito";
-  toggleBtn.addEventListener("click", () => {
-    sidebar.classList.toggle("open");
-  });
-  document.body.appendChild(toggleBtn);
+ // Crear el botón para abrir/cerrar sidebar
+const toggleBtn = document.createElement("button");
+toggleBtn.id = "sidebarToggle";
+
+// Crear el elemento de imagen y configurarlo
+const img = document.createElement("img");
+img.src = "img/carro.png";
+img.alt = "Carrito";
+img.style.width = "20px"; // Ajusta el tamaño según sea necesario
+
+// Agregar la imagen al botón
+toggleBtn.appendChild(img);
+
+toggleBtn.addEventListener("click", () => {
+  sidebar.classList.toggle("open");
+});
+document.body.appendChild(toggleBtn);
+
 
   // Crear el sidebar (ahora se mostrará el carrito de ventas y los botones de Procesar Venta y Ver Preventas)
   const sidebar = document.createElement("div");
   sidebar.id = "sidebarCaja";
   sidebar.innerHTML = `
-    <header>Carrito y Ventas</header>
+    <header>Carrito de Ventas</header>
     <div id="sidebarCart"></div>
   `;
   document.body.appendChild(sidebar);
