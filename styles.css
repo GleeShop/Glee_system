@@ -142,3 +142,7 @@ h5 {
   vertical-align: middle;
   filter: brightness(0) invert(1); /* Opcional: si quieres que se muestren en blanco */
 }
+
+#productsContainer {
+  margin-right: 60px; /* Espacio para que la tabla no se superponga con el sidebar */
+}

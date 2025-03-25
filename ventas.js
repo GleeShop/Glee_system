@@ -18,6 +18,10 @@ import {
 let productos = [];
 export let cart = [];
 
+// Variables para paginación en el listado de productos en ventas
+let currentPageSales = 1;
+let pageSizeSales = 5;
+
 // Datos del usuario y tienda  
 const usuarioActual = localStorage.getItem("loggedUser") || "admin";
 const loggedUserRole = localStorage.getItem("loggedUserRole") || "";
@@ -123,11 +127,19 @@ export function listenProducts() {
 
 /**
  * Renderiza los productos en el nodo "productsBody".
+ * Se filtran por búsqueda, talla; se ordenan de mayor a menor stock (para la tienda actual)
+ * y se aplican paginación.
  */
 export function renderProducts() {
   const storeSelect = document.getElementById("storeSelect");
   if (storeSelect) {
-    currentStore = storeSelect.value;
+    // Si el usuario no es admin, forzamos que la tienda mostrada sea la asociada y deshabilitamos el select
+    if (loggedUserRole.toLowerCase() !== "admin") {
+      storeSelect.value = currentStore;
+      storeSelect.disabled = true;
+    } else {
+      currentStore = storeSelect.value;
+    }
   }
   
   const searchQuery = (document.getElementById("searchInput")?.value || "").toLowerCase();
@@ -136,7 +148,7 @@ export function renderProducts() {
   if (!tbody) return;
 
   tbody.innerHTML = "";
-  const filtered = productos.filter(prod => {
+  let filtered = productos.filter(prod => {
     let matchSearch = ((prod.codigo || "").toLowerCase().includes(searchQuery) ||
                        (prod.descripcion || "").toLowerCase().includes(searchQuery));
     let matchSize = true;
@@ -145,11 +157,32 @@ export function renderProducts() {
     }
     return matchSearch && matchSize;
   });
+
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center">No hay productos con ese filtro</td></tr>`;
+    renderPaginationControlsSales(0);
     return;
   }
-  filtered.forEach(prod => {
+
+  // Ordenar de mayor a menor stock para la tienda actual
+  filtered.sort((a, b) => {
+    const stockA = (a.stock && typeof a.stock === "object")
+      ? (a.stock[currentStore] || 0)
+      : (a.stock || 0);
+    const stockB = (b.stock && typeof b.stock === "object")
+      ? (b.stock[currentStore] || 0)
+      : (b.stock || 0);
+    return stockB - stockA;
+  });
+
+  // Paginación
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / pageSizeSales);
+  if (currentPageSales > totalPages) currentPageSales = totalPages;
+  const startIndex = (currentPageSales - 1) * pageSizeSales;
+  const paginated = filtered.slice(startIndex, startIndex + pageSizeSales);
+
+  paginated.forEach(prod => {
     let stockDisplay = 0;
     if (prod.stock && typeof prod.stock === "object") {
       stockDisplay = currentStore
@@ -177,6 +210,68 @@ export function renderProducts() {
     });
     tbody.appendChild(tr);
   });
+  renderPaginationControlsSales(totalItems);
+}
+
+/**
+ * Renderiza controles de paginación para el listado de productos en ventas.
+ */
+function renderPaginationControlsSales(totalItems) {
+  let paginationContainer = document.getElementById("paginationContainerSales");
+  if (!paginationContainer) {
+    paginationContainer = document.createElement("div");
+    paginationContainer.id = "paginationContainerSales";
+    // Se ubica después de la tabla de productos (se asume que productsBody existe y tiene un padre)
+    const productsBody = document.getElementById("productsBody");
+    productsBody.parentElement.appendChild(paginationContainer);
+  }
+  paginationContainer.innerHTML = "";
+  
+  const totalPages = Math.ceil(totalItems / pageSizeSales);
+  const groupSize = 5;
+  const groupStart = Math.floor((currentPageSales - 1) / groupSize) * groupSize + 1;
+  const groupEnd = Math.min(groupStart + groupSize - 1, totalPages);
+
+  // Botón "Anterior"
+  const prevButton = document.createElement("button");
+  prevButton.textContent = "Anterior";
+  prevButton.className = "btn btn-outline-primary me-1";
+  prevButton.disabled = currentPageSales === 1;
+  prevButton.addEventListener("click", () => {
+    if (currentPageSales > 1) {
+      currentPageSales--;
+      renderProducts();
+    }
+  });
+  paginationContainer.appendChild(prevButton);
+
+  // Botones numéricos
+  for (let i = groupStart; i <= groupEnd; i++) {
+    const pageButton = document.createElement("button");
+    pageButton.textContent = i;
+    pageButton.className = "btn btn-outline-primary me-1";
+    if (i === currentPageSales) {
+      pageButton.classList.add("active");
+    }
+    pageButton.addEventListener("click", () => {
+      currentPageSales = i;
+      renderProducts();
+    });
+    paginationContainer.appendChild(pageButton);
+  }
+
+  // Botón "Siguiente"
+  const nextButton = document.createElement("button");
+  nextButton.textContent = "Siguiente";
+  nextButton.className = "btn btn-outline-primary";
+  nextButton.disabled = currentPageSales === totalPages || totalPages === 0;
+  nextButton.addEventListener("click", () => {
+    if (currentPageSales < totalPages) {
+      currentPageSales++;
+      renderProducts();
+    }
+  });
+  paginationContainer.appendChild(nextButton);
 }
 
 /**
@@ -440,7 +535,6 @@ export async function procesarVenta() {
           } else {
             transferenciaContEl.style.display = "none";
           }
-          // El abono se pedirá igual, sea efectivo o tarjeta; no lo ocultamos.
         });
       }
     });
@@ -605,7 +699,7 @@ export async function procesarVenta() {
   
   if (!formData) return;
 
-  // Construir el objeto de la venta
+  // Construir el objeto de la venta (se agrega la propiedad "tienda")
   let totalVenta = parseFloat(document.getElementById("totalVenta").textContent) || 0;
   let venta = {
     idVenta: await generarIdVentaCorta(),
@@ -629,7 +723,8 @@ export async function procesarVenta() {
     guia: formData.guia || "",
     montoAbono: formData.pagoObj?.montoAbono || 0,
     tipoVenta: saleCategory,
-    comentario: formData.pagoObj?.comentario || ""
+    comentario: formData.pagoObj?.comentario || "",
+    tienda: currentStore
   };
 
   // Código interno: "PREV-123" si es preventa, "VENTA-123" si no
@@ -689,6 +784,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
   if (storeSelect) {
     storeSelect.addEventListener("change", renderProducts);
+    // Si el usuario no es Admin, se deshabilita el selector y se fija la tienda asociada.
+    if (loggedUserRole.toLowerCase() !== "admin") {
+      storeSelect.value = currentStore;
+      storeSelect.disabled = true;
+    }
   }
   const searchInput = document.getElementById("searchInput");
   if (searchInput) {
@@ -699,6 +799,9 @@ document.addEventListener("DOMContentLoaded", () => {
     sizeFilter.addEventListener("change", renderProducts);
   }
   listenProducts();
+  
+  // Crear sidebar para opciones de caja
+  crearSidebarCaja();
 });
 
 /**
@@ -739,7 +842,6 @@ window.descargarComprobante = function(venta) {
       <p><strong>Monto Pendiente:</strong> Q${pendiente.toFixed(2)}</p>
     `;
   }
-  // Si es venta en línea y existe comentario
   if (venta.tipoVenta === "online" && venta.comentario) {
     comprobanteHtml += `<p><strong>Comentario:</strong> ${venta.comentario}</p>`;
   }
@@ -754,6 +856,91 @@ window.descargarComprobante = function(venta) {
   document.body.removeChild(a);
 };
 
+window.descargarComprobante = descargarComprobante;
+
+/**
+ * Crea un sidebar retraíble en el lado izquierdo para las opciones de caja.
+ */
+function crearSidebarCaja() {
+  // Crear estilo para el sidebar
+  const style = document.createElement("style");
+  style.textContent = `
+    #sidebarCaja {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 250px;
+      height: 100%;
+      background: #f8f9fa;
+      border-right: 1px solid #ddd;
+      padding: 10px;
+      transform: translateX(-220px);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+    #sidebarCaja.open {
+      transform: translateX(0);
+    }
+    #sidebarCaja header {
+      font-weight: bold;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    #sidebarToggle {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      padding: 5px 10px;
+      cursor: pointer;
+      z-index: 1100;
+    }
+    #sidebarCaja button {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Crear el botón para abrir/cerrar sidebar
+  const toggleBtn = document.createElement("button");
+  toggleBtn.id = "sidebarToggle";
+  toggleBtn.textContent = "Opciones de Caja";
+  toggleBtn.addEventListener("click", () => {
+    sidebar.classList.toggle("open");
+  });
+  document.body.appendChild(toggleBtn);
+
+  // Crear el sidebar
+  const sidebar = document.createElement("div");
+  sidebar.id = "sidebarCaja";
+  sidebar.innerHTML = `
+    <header>Opciones de Caja</header>
+    <button id="btnAbrirCaja" class="btn btn-success">Abrir Caja</button>
+    <button id="btnCerrarCaja" class="btn btn-danger">Cerrar Caja</button>
+  `;
+  document.body.appendChild(sidebar);
+
+  // Eventos para los botones de caja (estas funciones pueden personalizarse)
+  document.getElementById("btnAbrirCaja").addEventListener("click", () => {
+    Swal.fire("Caja Abierta", "La caja ha sido abierta.", "success");
+    window.cajaAbierta = true;
+    // Aquí puedes agregar lógica adicional para la apertura de caja
+  });
+  document.getElementById("btnCerrarCaja").addEventListener("click", () => {
+    Swal.fire("Caja Cerrada", "La caja ha sido cerrada.", "info");
+    window.cajaAbierta = false;
+    // Aquí puedes agregar lógica adicional para el cierre de caja
+  });
+}
+
+window.procesarVenta = procesarVenta;
+window.procesarPreventa = procesarPreventa;
+window.agregarProductoAlCarrito = agregarProductoAlCarrito;
+window.renderCart = renderCart;
+window.listenProducts = listenProducts;
 
 document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
