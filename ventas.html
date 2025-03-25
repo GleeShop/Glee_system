@@ -29,33 +29,13 @@
   <body>
     <div class="container-fluid">
       <div class="row">
-        <!-- Lado Izquierdo: Carrito de Venta y Controles de Caja -->
+        <!-- Columna Izquierda: Solo Controles de Caja -->
         <div class="col-md-5 border-end">
-          <h2>Carrito de Venta</h2>
-          <table class="table table-sm" id="cartTable">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cant.</th>
-                <th>Precio Unitario (Q)</th>
-                <th>Subtotal (Q)</th>
-                <th>Remover</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-          <h4>
-            Total: Q <span id="totalVenta">0.00</span>
-          </h4>
-          <button class="btn btn-success mt-2" onclick="procesarVenta()">Procesar Venta</button>
-          <!-- Enlace para ver la tabla de preventas -->
-          <a href="preventas.html" class="btn btn-info mt-2">Ver Preventas</a>
-          <hr />
-          <!-- Controles de Caja -->
+          <h2>Controles de Caja</h2>
           <button class="btn btn-warning mt-2" onclick="abrirCaja()">Abrir Caja</button>
           <button class="btn btn-danger mt-2" onclick="cerrarCaja()">Cerrar Caja</button>
         </div>
-        <!-- Lado Derecho: Productos Disponibles -->
+        <!-- Columna Derecha: Productos Disponibles y Configuración de Paginación -->
         <div class="col-md-7">
           <h2>Productos Disponibles</h2>
           <div class="mb-3">
@@ -102,6 +82,18 @@
               <!-- Los productos se renderizarán dinámicamente -->
             </tbody>
           </table>
+          <!-- Selector para cantidad de productos por página -->
+          <div class="mb-3">
+            <label for="pageSizeSelect" class="form-label">Productos por página:</label>
+            <select id="pageSizeSelect" class="form-select" onchange="updatePageSize()">
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

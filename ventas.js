@@ -323,34 +323,37 @@ export async function agregarProductoAlCarrito(productId) {
 
 /**
  * Renderiza el carrito en el nodo "cartTable".
+ * (Esta función se sigue usando para actualizar el carrito en la vista principal si fuera necesario)
  */
 export function renderCart() {
   const tbody = document.querySelector("#cartTable tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = "";
-  let total = 0;
-  cart.forEach((item, idx) => {
-    let subt = item.cantidad * item.precio;
-    total += subt;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${item.producto}<br><small>${item.producto_codigo}</small></td>
-      <td>${item.cantidad}</td>
-      <td>Q ${item.precio.toFixed(2)}</td>
-      <td>Q ${subt.toFixed(2)}</td>
-      <td><button class="btn btn-danger btn-sm">❌</button></td>
-    `;
-    tr.querySelector("button").addEventListener("click", () => {
-      cart.splice(idx, 1);
-      renderCart();
+  if (tbody) {
+    tbody.innerHTML = "";
+    let total = 0;
+    cart.forEach((item, idx) => {
+      let subt = item.cantidad * item.precio;
+      total += subt;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${item.producto}<br><small>${item.producto_codigo}</small></td>
+        <td>${item.cantidad}</td>
+        <td>Q ${item.precio.toFixed(2)}</td>
+        <td>Q ${subt.toFixed(2)}</td>
+        <td><button class="btn btn-danger btn-sm">❌</button></td>
+      `;
+      tr.querySelector("button").addEventListener("click", () => {
+        cart.splice(idx, 1);
+        renderCart();
+      });
+      tbody.appendChild(tr);
     });
-    tbody.appendChild(tr);
-  });
-  const totalVentaEl = document.getElementById("totalVenta");
-  if (totalVentaEl) {
-    totalVentaEl.textContent = total.toFixed(2);
+    const totalVentaEl = document.getElementById("totalVenta");
+    if (totalVentaEl) {
+      totalVentaEl.textContent = total.toFixed(2);
+    }
   }
+  // Actualiza también el carrito en el sidebar
+  renderSidebarCart();
 }
 
 /**
@@ -593,7 +596,7 @@ export async function procesarVenta() {
         let pagoObj = { metodo };
         if (metodo === "efectivo") {
           let montoRecibido = parseFloat(document.getElementById("montoRecibido").value) || 0;
-          let totalVentaActual = parseFloat(document.getElementById("totalVenta").textContent) || 0;
+          let totalVenta = cart.reduce((total, item) => total + (item.cantidad * item.precio), 0);
           if (montoRecibido < totalVentaActual) {
             Swal.showValidationMessage("Monto insuficiente para cubrir el total");
             return false;
@@ -700,7 +703,7 @@ export async function procesarVenta() {
   if (!formData) return;
 
   // Construir el objeto de la venta (se agrega la propiedad "tienda")
-  let totalVenta = parseFloat(document.getElementById("totalVenta").textContent) || 0;
+  let totalVenta = cart.reduce((total, item) => total + (item.cantidad * item.precio), 0);
   let venta = {
     idVenta: await generarIdVentaCorta(),
     fecha: new Date().toISOString(),
@@ -780,29 +783,72 @@ window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const storeSelect = document.getElementById("storeSelect");
-  if (storeSelect) {
-    storeSelect.addEventListener("change", renderProducts);
-    // Si el usuario no es Admin, se deshabilita el selector y se fija la tienda asociada.
-    if (loggedUserRole.toLowerCase() !== "admin") {
-      storeSelect.value = currentStore;
-      storeSelect.disabled = true;
-    }
+/**
+ * Actualiza la cantidad de productos mostrados en la paginación.
+ */
+export function updatePageSize() {
+  const pageSizeSelect = document.getElementById("pageSizeSelect");
+  if (pageSizeSelect) {
+    pageSizeSales = parseInt(pageSizeSelect.value);
+    currentPageSales = 1; // resetear a la primera página
+    renderProducts();
   }
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) {
-    searchInput.addEventListener("input", renderProducts);
+}
+window.updatePageSize = updatePageSize;
+
+/**
+ * Renderiza el carrito en el sidebar.
+ */
+export function renderSidebarCart() {
+  const sidebarCartContainer = document.getElementById("sidebarCart");
+  if (!sidebarCartContainer) return;
+  let html = `<h2>Carrito de Venta</h2>`;
+  if (cart.length === 0) {
+    html += `<p>El carrito está vacío.</p>`;
+  } else {
+    html += `<table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Cant.</th>
+          <th>Precio Unitario (Q)</th>
+          <th>Subtotal (Q)</th>
+          <th>Remover</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    let total = 0;
+    cart.forEach((item, idx) => {
+      let subt = item.cantidad * item.precio;
+      total += subt;
+      html += `<tr>
+        <td>${item.producto}<br><small>${item.producto_codigo}</small></td>
+        <td>${item.cantidad}</td>
+        <td>Q ${item.precio.toFixed(2)}</td>
+        <td>Q ${subt.toFixed(2)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="removeFromCart(${idx})">❌</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+    html += `<h4>Total: Q ${total.toFixed(2)}</h4>`;
   }
-  const sizeFilter = document.getElementById("sizeFilter");
-  if (sizeFilter) {
-    sizeFilter.addEventListener("change", renderProducts);
-  }
-  listenProducts();
-  
-  // Crear sidebar para opciones de caja
-  crearSidebarCaja();
-});
+  // Se añaden los botones de Procesar Venta y Ver Preventas al sidebar
+  html += `
+    <button class="btn btn-success mt-2" onclick="procesarVenta()">Procesar Venta</button>
+    <a href="preventas.html" class="btn btn-info mt-2">Ver Preventas</a>
+  `;
+  sidebarCartContainer.innerHTML = html;
+}
+window.renderSidebarCart = renderSidebarCart;
+
+/**
+ * Función para remover un producto del carrito desde el sidebar.
+ */
+window.removeFromCart = function(idx) {
+  cart.splice(idx, 1);
+  renderCart();
+  renderSidebarCart();
+};
 
 /**
  * Genera un comprobante HTML para la venta y permite descargarlo.
@@ -859,7 +905,8 @@ window.descargarComprobante = function(venta) {
 window.descargarComprobante = descargarComprobante;
 
 /**
- * Crea un sidebar retraíble en el lado izquierdo para las opciones de caja.
+ * Crea un sidebar retraíble en el lado izquierdo para mostrar el carrito de ventas
+ * y los botones de Procesar Venta y Ver Preventas.
  */
 function crearSidebarCaja() {
   // Crear estilo para el sidebar
@@ -869,14 +916,15 @@ function crearSidebarCaja() {
       position: fixed;
       top: 0;
       left: 0;
-      width: 250px;
+      width: 350px;
       height: 100%;
       background: #f8f9fa;
       border-right: 1px solid #ddd;
       padding: 10px;
-      transform: translateX(-220px);
+      transform: translateX(-320px);
       transition: transform 0.3s ease;
       z-index: 1000;
+      overflow-y: auto;
     }
     #sidebarCaja.open {
       transform: translateX(0);
@@ -897,7 +945,10 @@ function crearSidebarCaja() {
       cursor: pointer;
       z-index: 1100;
     }
-    #sidebarCaja button {
+    #sidebarCaja table {
+      width: 100%;
+    }
+    #sidebarCaja button, #sidebarCaja a {
       width: 100%;
       margin-bottom: 10px;
     }
@@ -907,33 +958,20 @@ function crearSidebarCaja() {
   // Crear el botón para abrir/cerrar sidebar
   const toggleBtn = document.createElement("button");
   toggleBtn.id = "sidebarToggle";
-  toggleBtn.textContent = "Opciones de Caja";
+  toggleBtn.textContent = "Mostrar Carrito";
   toggleBtn.addEventListener("click", () => {
     sidebar.classList.toggle("open");
   });
   document.body.appendChild(toggleBtn);
 
-  // Crear el sidebar
+  // Crear el sidebar (ahora se mostrará el carrito de ventas y los botones de Procesar Venta y Ver Preventas)
   const sidebar = document.createElement("div");
   sidebar.id = "sidebarCaja";
   sidebar.innerHTML = `
-    <header>Opciones de Caja</header>
-    <button id="btnAbrirCaja" class="btn btn-success">Abrir Caja</button>
-    <button id="btnCerrarCaja" class="btn btn-danger">Cerrar Caja</button>
+    <header>Carrito y Ventas</header>
+    <div id="sidebarCart"></div>
   `;
   document.body.appendChild(sidebar);
-
-  // Eventos para los botones de caja (estas funciones pueden personalizarse)
-  document.getElementById("btnAbrirCaja").addEventListener("click", () => {
-    Swal.fire("Caja Abierta", "La caja ha sido abierta.", "success");
-    window.cajaAbierta = true;
-    // Aquí puedes agregar lógica adicional para la apertura de caja
-  });
-  document.getElementById("btnCerrarCaja").addEventListener("click", () => {
-    Swal.fire("Caja Cerrada", "La caja ha sido cerrada.", "info");
-    window.cajaAbierta = false;
-    // Aquí puedes agregar lógica adicional para el cierre de caja
-  });
 }
 
 window.procesarVenta = procesarVenta;
@@ -941,6 +979,30 @@ window.procesarPreventa = procesarPreventa;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const storeSelect = document.getElementById("storeSelect");
+  if (storeSelect) {
+    storeSelect.addEventListener("change", renderProducts);
+    // Si el usuario no es Admin, se deshabilita el selector y se fija la tienda asociada.
+    if (loggedUserRole.toLowerCase() !== "admin") {
+      storeSelect.value = currentStore;
+      storeSelect.disabled = true;
+    }
+  }
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", renderProducts);
+  }
+  const sizeFilter = document.getElementById("sizeFilter");
+  if (sizeFilter) {
+    sizeFilter.addEventListener("change", renderProducts);
+  }
+  listenProducts();
+  
+  // Crear sidebar para mostrar el carrito de ventas y los botones de venta
+  crearSidebarCaja();
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
