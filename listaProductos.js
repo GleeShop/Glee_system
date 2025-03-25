@@ -17,6 +17,10 @@ console.log("Verificando db =>", db);
 let products = [];
 let selectedProductId = null;
 
+// Variables para la paginación
+let currentPage = 1;
+let pageSize = 5; // valor por defecto
+
 // Se leen los datos del usuario desde localStorage
 const loggedUser      = localStorage.getItem("loggedUser") || "";
 const loggedUserRole  = localStorage.getItem("loggedUserRole") || "";
@@ -98,8 +102,9 @@ if (loggedUserRole.toLowerCase() === "admin") {
 }
 
 // Escucha en tiempo real la colección "productos"
+// Se cambia el orden para que se ordene según el "codigo" de producto (ascendente)
 function listenProducts() {
-  const qProducts = query(collection(db, "productos"), orderBy("createdAt", "desc"));
+  const qProducts = query(collection(db, "productos"), orderBy("codigo", "asc"));
   onSnapshot(
     qProducts,
     (snapshot) => {
@@ -118,11 +123,13 @@ function listenProducts() {
   );
 }
 
-// Función para renderizar productos filtrados
+// Función para renderizar productos filtrados con paginación
 function renderProducts() {
   const searchQuery = document.getElementById("searchInput").value.trim().toLowerCase();
   const tbody = document.getElementById("productsBody");
   tbody.innerHTML = "";
+  
+  // Filtrar productos por búsqueda (codigo, descripción o talla)
   const filteredProducts = products.filter(prod => {
     const codigo = prod.codigo?.toLowerCase() || "";
     const descripcion = prod.descripcion?.toLowerCase() || "";
@@ -132,10 +139,22 @@ function renderProducts() {
 
   if (filteredProducts.length === 0) {
     tbody.innerHTML =
-      "<tr><td colspan='5' class='text-center'>No hay productos disponibles</td></tr>";
+      "<tr><td colspan='6' class='text-center'>No hay productos disponibles</td></tr>";
+    const paginationContainer = document.getElementById("paginationContainer");
+    if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
-  filteredProducts.forEach((prod) => {
+  
+  // Ordenar por código (aunque ya viene ordenado por la query, se garantiza aquí)
+  filteredProducts.sort((a, b) => {
+    return (a.codigo || "").localeCompare(b.codigo || "");
+  });
+
+  // Paginación: calcular índices y obtener los productos a mostrar
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
+
+  paginatedProducts.forEach((prod) => {
     const tr = document.createElement("tr");
     const displayedStock = getDisplayedStock(prod);
     tr.innerHTML = `
@@ -155,6 +174,9 @@ function renderProducts() {
     });
     tbody.appendChild(tr);
   });
+
+  // Renderizar controles de paginación
+  renderPaginationControls(filteredProducts.length);
 }
 
 // Calcula el stock a mostrar según rol y tienda
@@ -171,6 +193,91 @@ function getDisplayedStock(product, store = currentStore) {
   return product.stock[store] || 0;
 }
 
+// Función para renderizar los controles de paginación con números agrupados en bloques de 5
+function renderPaginationControls(totalItems) {
+  const paginationContainer = document.getElementById("paginationContainer");
+  if (!paginationContainer) return;
+  
+  const totalPages = Math.ceil(totalItems / pageSize);
+  paginationContainer.innerHTML = "";
+  
+  const groupSize = 5;
+  const groupStart = Math.floor((currentPage - 1) / groupSize) * groupSize + 1;
+  const groupEnd = Math.min(groupStart + groupSize - 1, totalPages);
+  
+  // Botón "Anterior" (para ir a la página anterior)
+  const prevButton = document.createElement("button");
+  prevButton.textContent = "Anterior";
+  prevButton.className = "btn btn-outline-primary me-1";
+  prevButton.disabled = currentPage === 1;
+  prevButton.addEventListener("click", () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderProducts();
+    }
+  });
+  paginationContainer.appendChild(prevButton);
+  
+  // Botones numéricos para las páginas del grupo actual
+  for (let i = groupStart; i <= groupEnd; i++) {
+    const pageButton = document.createElement("button");
+    pageButton.textContent = i;
+    pageButton.className = "btn btn-outline-primary me-1";
+    if (i === currentPage) {
+      pageButton.classList.add("active");
+    }
+    pageButton.addEventListener("click", () => {
+      currentPage = i;
+      renderProducts();
+    });
+    paginationContainer.appendChild(pageButton);
+  }
+  
+  // Botón "Siguiente" (para ir a la página siguiente)
+  const nextButton = document.createElement("button");
+  nextButton.textContent = "Siguiente";
+  nextButton.className = "btn btn-outline-primary";
+  nextButton.disabled = currentPage === totalPages || totalPages === 0;
+  nextButton.addEventListener("click", () => {
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderProducts();
+    }
+  });
+  paginationContainer.appendChild(nextButton);
+}
+
+// Función para renderizar el selector de cantidad de registros
+function renderPageSizeSelector() {
+  const container = document.getElementById("pageSizeContainer");
+  if (!container) return;
+  container.innerHTML = "";
+  
+  const label = document.createElement("label");
+  label.textContent = "Mostrar registros:";
+  label.className = "me-2";
+  
+  const select = document.createElement("select");
+  select.className = "form-select d-inline-block w-auto";
+  
+  [5, 10, 15, 20, 25, 30].forEach(num => {
+    const option = document.createElement("option");
+    option.value = num;
+    option.textContent = num;
+    if (num === pageSize) option.selected = true;
+    select.appendChild(option);
+  });
+  
+  select.addEventListener("change", (e) => {
+    pageSize = parseInt(e.target.value);
+    currentPage = 1;
+    renderProducts();
+  });
+  
+  container.appendChild(label);
+  container.appendChild(select);
+}
+
 /*********************************************
  * FUNCIONES CRUD PARA PRODUCTOS
  *********************************************/
@@ -181,14 +288,16 @@ async function crearProducto() {
       <input id="swal-input1" class="swal2-input" placeholder="Código">
       <input id="swal-input2" class="swal2-input" placeholder="Descripción">
       <input id="swal-input3" class="swal2-input" placeholder="Talla (opcional)">
-      <input id="swal-input4" class="swal2-input" placeholder="Precio" type="number" min="0.01" step="0.01">
+      <input id="swal-input4" class="swal2-input" placeholder="Color">
+      <input id="swal-input5" class="swal2-input" placeholder="Precio" type="number" min="0.01" step="0.01">
     `,
     focusConfirm: false,
     preConfirm: () => {
       const codigo = document.getElementById("swal-input1").value.trim();
       const descripcion = document.getElementById("swal-input2").value.trim();
       const talla = document.getElementById("swal-input3").value.trim();
-      const precio = parseFloat(document.getElementById("swal-input4").value);
+      const color = document.getElementById("swal-input4").value.trim();
+      const precio = parseFloat(document.getElementById("swal-input5").value);
       if (!codigo) {
         Swal.showValidationMessage("El código es obligatorio");
         return;
@@ -197,11 +306,15 @@ async function crearProducto() {
         Swal.showValidationMessage("La descripción es obligatoria");
         return;
       }
+      if (!color) {
+        Swal.showValidationMessage("El color es obligatorio");
+        return;
+      }
       if (isNaN(precio) || precio <= 0) {
         Swal.showValidationMessage("El precio debe ser mayor a 0");
         return;
       }
-      return { codigo, descripcion, talla, precio };
+      return { codigo, descripcion, talla, color, precio };
     }
   });
   if (!formValues) return;
@@ -210,6 +323,7 @@ async function crearProducto() {
       codigo: formValues.codigo,
       descripcion: formValues.descripcion,
       talla: formValues.talla,
+      color: formValues.color,
       precio: formValues.precio,
       stock: {},
       createdAt: new Date().toISOString()
@@ -237,14 +351,16 @@ async function editarProducto() {
       <input id="swal-input1" class="swal2-input" placeholder="Código" value="${product.codigo}">
       <input id="swal-input2" class="swal2-input" placeholder="Descripción" value="${product.descripcion}">
       <input id="swal-input3" class="swal2-input" placeholder="Talla (opcional)" value="${product.talla || ''}">
-      <input id="swal-input4" class="swal2-input" placeholder="Precio" type="number" min="0.01" step="0.01" value="${product.precio}">
+      <input id="swal-input4" class="swal2-input" placeholder="Color" value="${product.color || ''}">
+      <input id="swal-input5" class="swal2-input" placeholder="Precio" type="number" min="0.01" step="0.01" value="${product.precio}">
     `,
     focusConfirm: false,
     preConfirm: () => {
       const codigo = document.getElementById("swal-input1").value.trim();
       const descripcion = document.getElementById("swal-input2").value.trim();
       const talla = document.getElementById("swal-input3").value.trim();
-      const precio = parseFloat(document.getElementById("swal-input4").value);
+      const color = document.getElementById("swal-input4").value.trim();
+      const precio = parseFloat(document.getElementById("swal-input5").value);
       if (!codigo) {
         Swal.showValidationMessage("El código es obligatorio");
         return;
@@ -253,11 +369,15 @@ async function editarProducto() {
         Swal.showValidationMessage("La descripción es obligatoria");
         return;
       }
+      if (!color) {
+        Swal.showValidationMessage("El color es obligatorio");
+        return;
+      }
       if (isNaN(precio) || precio <= 0) {
         Swal.showValidationMessage("El precio debe ser mayor a 0");
         return;
       }
-      return { codigo, descripcion, talla, precio };
+      return { codigo, descripcion, talla, color, precio };
     }
   });
   if (!formValues) return;
@@ -266,6 +386,7 @@ async function editarProducto() {
       codigo: formValues.codigo,
       descripcion: formValues.descripcion,
       talla: formValues.talla,
+      color: formValues.color,
       precio: formValues.precio
     };
     await updateDoc(doc(db, "productos", selectedProductId), updateData);
@@ -437,6 +558,21 @@ async function cargarConCadenaTexto() {
  * INICIALIZACIÓN DE LA PÁGINA Y ASIGNACIÓN DE EVENTOS
  *********************************************/
 document.addEventListener("DOMContentLoaded", () => {
+  // Agregar el contenedor de paginación si no existe
+  if (!document.getElementById("paginationContainer")) {
+    const paginationContainer = document.createElement("div");
+    paginationContainer.id = "paginationContainer";
+    const productsBody = document.getElementById("productsBody");
+    if (productsBody && productsBody.parentElement) {
+      productsBody.parentElement.appendChild(paginationContainer);
+    } else {
+      document.body.appendChild(paginationContainer);
+    }
+  }
+  
+  // Renderizar el selector de cantidad de registros
+  renderPageSizeSelector();
+  
   listenProducts();
 
   // Filtro de búsqueda
@@ -470,5 +606,3 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCrearProducto.addEventListener("click", crearProducto);
   }
 });
-
-// Nota: Implementa la función "cargarConCadenaTexto" según tus necesidades para la carga masiva.
