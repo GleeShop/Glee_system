@@ -887,7 +887,7 @@ export function renderSidebarCart() {
   // Se añaden los botones de Procesar Venta y Ver Preventas al sidebar
   html += `
     <button class="btn btn-success mt-2" onclick="procesarVenta()">Procesar Venta</button>
-    <a href="preventas.html" class="btn btn-info mt-2">Ver Preventas</a>
+    <a href="preventas.html" class="btn btn-info mt-2">Procesar Preventa</a>
   `;
   sidebarCartContainer.innerHTML = html;
 }
