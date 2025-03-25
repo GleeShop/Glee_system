@@ -597,13 +597,14 @@ export async function procesarVenta() {
         if (metodo === "efectivo") {
           let montoRecibido = parseFloat(document.getElementById("montoRecibido").value) || 0;
           let totalVenta = cart.reduce((total, item) => total + (item.cantidad * item.precio), 0);
-          if (montoRecibido < totalVentaActual) {
+          if (montoRecibido < totalVenta) {
             Swal.showValidationMessage("Monto insuficiente para cubrir el total");
             return false;
           }
           pagoObj.montoRecibido = montoRecibido;
-          pagoObj.cambio = montoRecibido - totalVentaActual;
+          pagoObj.cambio = montoRecibido - totalVenta;
         }
+        
         if (metodo === "transferencia") {
           let numTransferencia = document.getElementById("numeroTransferencia").value.trim();
           if (!numTransferencia) {
