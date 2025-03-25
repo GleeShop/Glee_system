@@ -147,7 +147,7 @@ async function verVenta(ventaId) {
     const ventaSnap = await getDoc(ventaRef);
     if (ventaSnap.exists()) {
       const venta = ventaSnap.data();
-      let detalleHtml = `<h2>Detalles de la Venta</h2>`;
+      let detalleHtml = `<h2></h2>`;
       detalleHtml += `<p><strong>ID Venta:</strong> ${venta.idVenta || ventaId}</p>`;
       detalleHtml += `<p><strong>Fecha:</strong> ${new Date(venta.fecha).toLocaleString()}</p>`;
       detalleHtml += `<p><strong>Cliente:</strong> ${venta.cliente?.nombre || "N/A"}</p>`;

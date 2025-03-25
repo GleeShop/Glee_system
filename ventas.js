@@ -398,7 +398,9 @@ export function renderCart() {
  * Renderiza un resumen simple del carrito (productos + total).
  */
 function renderCartSummary() {
-  let total = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
+  // Calcula el total directamente del carrito:
+  let total = cart.reduce((suma, item) => suma + (item.cantidad * item.precio), 0);
+
   let resumenHtml = "";
   cart.forEach(item => {
     let subt = item.cantidad * item.precio;
@@ -407,9 +409,12 @@ function renderCartSummary() {
          Cant: ${item.cantidad} x Q${item.precio.toFixed(2)} = Q${subt.toFixed(2)}</p>
     `;
   });
+  
+  // Ahora sí, “Venta Total” mostrará la suma real del carrito
   resumenHtml += `<h4>Venta Total: Q${total.toFixed(2)}</h4>`;
   return resumenHtml;
 }
+
 
 /**
  * Procesa la venta: pide código de empleado, luego tipo de venta, y muestra
@@ -556,7 +561,7 @@ export async function procesarVenta() {
           Swal.showValidationMessage("El abono debe ser mayor a 0");
           return false;
         }
-        let totalSale = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
+        let totalSale = cart.reduce((total, item) => total + (item.cantidad * item.precio), 0);
         if (montoAbono > totalSale) {
           Swal.showValidationMessage("El abono no puede exceder el total de la venta");
           return false;
@@ -611,7 +616,7 @@ export async function procesarVenta() {
         </select>
         <div id="pagoEfectivoContainer">
           <input type="number" id="montoRecibido" class="swal2-input" 
-                 value="${parseFloat(document.getElementById("totalVenta")?.textContent || "0")}" 
+                 value="${cart.reduce((total, item) => total + (item.cantidad * item.precio), 0)}"
                  placeholder="Monto recibido (Q)">
         </div>
         <div id="numeroTransferenciaContainer" style="display: none;">
