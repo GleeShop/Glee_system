@@ -32,6 +32,7 @@ $(document).ready(function () {
       { title: "Cliente" },
       { title: "Vendedor" },
       { title: "Monto Total" },
+      { title: "Método de Venta" }, // Nueva columna aquí
       { title: "Método de pago" },
       { title: "Estado" },
       { title: "Acciones", orderable: false }
@@ -71,24 +72,28 @@ function cargarVentas() {
     snapshot.forEach((docSnap) => {
       let venta = docSnap.data();
       const fechaVenta = new Date(venta.fecha).toISOString().split("T")[0];
-
+  
       if (fechaFiltro && fechaVenta !== fechaFiltro) {
         return;
       }
-
+  
       let idVentaMostrar = venta.idVenta ? Number(venta.idVenta) : docSnap.id;
       const empleado = venta.empleadoNombre || "N/A";
+      const metodoVenta = venta.tipoVenta || "N/A";
+
       let acciones = `<button class="btn btn-sm btn-info" onclick="verVenta('${docSnap.id}')">VER</button>`;
       if (isAdmin) {
         acciones += ` <button class="btn btn-sm btn-warning" onclick="anularVenta('${docSnap.id}')">ANULAR</button>`;
         acciones += ` <button class="btn btn-sm btn-danger" onclick="eliminarVenta('${docSnap.id}')">ELIMINAR</button>`;
       }
+  
       tablaVentas.row.add([
         idVentaMostrar,
         new Date(venta.fecha).toLocaleString(),
         venta.cliente.nombre,
         empleado,
         "Q" + Number(venta.total).toFixed(2),
+        metodoVenta, // Aquí se agrega el método de venta
         venta.metodo_pago,
         venta.estado || "COMPLETADA",
         acciones
