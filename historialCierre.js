@@ -63,9 +63,7 @@ export async function loadHistorialCierre(filterDate = "") {
         <td>Q ${Number(cierre.totalEfectivoSistema || 0).toFixed(2)}</td>
         <td>Q ${Number(cierre.totalIngresado || 0).toFixed(2)}</td>
         <td>Q ${Number(cierre.diferencia || 0).toFixed(2)}</td>
-        <td>
-          ${buttonsHtml}
-        </td>
+        <td>${buttonsHtml}</td>
       `;
 
       tr.querySelectorAll("button").forEach(btn => {
@@ -97,40 +95,22 @@ export async function loadHistorialCierre(filterDate = "") {
   }
 }
 
-// Mantén las demás funciones exactamente igual (handleAccionCierre, verReporteCierre, descargarReporteCierreHistorial, filtrarCierres, etc.)
+$.fn.dataTable.ext.search.push(function (settings, data) {
+  const filtroFecha = $("#filtroFecha").val();
+  const registroFechaHora = data[0] || "";
+  if (!filtroFecha) return true;
 
-// Inicializar la carga al cargar la página
-window.addEventListener("DOMContentLoaded", () => {
-  loadHistorialCierre();
-});
-
-
-// Agregar filtro personalizado para DataTables (global)
-$.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-  const filtroFecha = $("#filtroFecha").val(); // Formato YYYY-MM-DD
-  const registroFechaHora = data[0] || ""; // Se espera "dd/mm/yyyy HH:MM:SS"
-  if (!filtroFecha) {
-    return true; // Sin filtro, se muestran todos los registros
-  }
-  // Convertir el valor del input a dd/mm/yyyy
   const fechaFiltro = convertirFecha(filtroFecha);
-  // Extraer la parte de la fecha del registro (primeros 10 caracteres)
   const fechaRegistro = registroFechaHora.substring(0, 10);
   return fechaRegistro === fechaFiltro;
 });
 
-// Configurar evento para redibujar la tabla cuando se cambia el filtro de fecha
 $(document).on("change", "#filtroFecha", function () {
-  if (dtInstance) {
-    dtInstance.draw();
-  }
+  if (dtInstance) dtInstance.draw();
 });
 
-// Función para manejar las acciones en cada cierre
 async function handleAccionCierre(action, cierre) {
-  if (!isAdmin && (action === "anular" || action === "eliminar")) {
-    return;
-  }
+  if (!isAdmin && (action === "anular" || action === "eliminar")) return;
 
   switch (action) {
     case "ver":
@@ -153,10 +133,21 @@ async function handleAccionCierre(action, cierre) {
     case "descargar":
       descargarReporteCierreHistorial(cierre);
       break;
-    default:
-      break;
   }
 }
+
+export function filtrarCierres() {
+  const filterDate = document.getElementById("filtroFecha").value;
+  if (filterDate) loadHistorialCierre(convertirFecha(filterDate));
+  else loadHistorialCierre();
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById("filtroFecha").value = today;
+  loadHistorialCierre();
+});
+
 
 // Función para ver el reporte del cierre (se asume que se almacenó en la colección "reportescierre")
 async function verReporteCierre(cierre) {
@@ -223,13 +214,4 @@ async function descargarReporteCierreHistorial(cierre) {
   }
 }
 
-// Función para filtrar cierres manualmente (si se invoca desde otro lugar)
-export function filtrarCierres() {
-  const filterDate = document.getElementById("filtroFecha").value;
-  if (filterDate) {
-    loadHistorialCierre(convertirFecha(filterDate));
-  } else {
-    loadHistorialCierre();
-  }
-}
 
