@@ -3,27 +3,23 @@ import {
   collection,
   query,
   orderBy,
-  getDocs,
   onSnapshot,
   doc,
   updateDoc,
-  deleteDoc,
-  getDoc
+  getDoc,
+  where
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-// Variable global para almacenar la instancia de DataTable
 let dtInstance;
 
-// Datos de usuario
+const loggedUser = localStorage.getItem("loggedUser") || "";
 const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
 const isAdmin = loggedUserRole === "admin";
 
-// Inicialización: espera a que el DOM esté listo y crea la DataTable solo una vez.
 $(document).ready(function () {
   dtInstance = $("#ventasTable").DataTable({
     pageLength: 5,
-      lengthMenu: [[5, 10, 25, 30], [5, 10, 25, 30]],
-     
+    lengthMenu: [[5, 10, 25, 30], [5, 10, 25, 30]],
     language: {
       url: "https://cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json"
     },
@@ -43,26 +39,29 @@ $(document).ready(function () {
   });
 
   cargarVentas();
-  
-  // Si tienes un input para filtrar (opcional)
+
   $("#filtroFecha").on("change", cargarVentas);
 });
 
-// Función para cargar y actualizar las ventas (filtrando manualmente ventas en línea)
 function cargarVentas() {
   const ventasRef = collection(db, "ventas");
-  const q = query(ventasRef, orderBy("fecha", "desc"));
+
+  let condiciones = [orderBy("fecha", "desc")];
+
+  condiciones.push(where("tipoVenta", "==", "online"));
+
+  if (!isAdmin) {
+    condiciones.push(where("usuario", "==", loggedUser));
+  }
+
+  const q = query(ventasRef, ...condiciones);
 
   onSnapshot(q, (snapshot) => {
     let ventasEnLinea = [];
 
     snapshot.forEach((docSnap) => {
       let venta = docSnap.data();
-
-      // Filtrar por tipoVenta === "online"
-      if (venta.tipoVenta && venta.tipoVenta.trim().toLowerCase() === "online") {
-        ventasEnLinea.push({ id: docSnap.id, ...venta });
-      }
+      ventasEnLinea.push({ id: docSnap.id, ...venta });
     });
 
     const filas = ventasEnLinea.map((venta) => {
@@ -72,7 +71,7 @@ function cargarVentas() {
       const empleadoDisplay = venta.empleadoNombre || "N/A";
       const metodoPagoDisplay = venta.metodo_pago || "";
       const totalVentaDisplay = venta.total ? Number(venta.total).toFixed(2) : "0.00";
-      const estadoDisplay = venta.estado ? venta.estado : "Pendiente Envío";
+      const estadoDisplay = venta.estado || "Pendiente Envío";
 
       let acciones = `<button class="btn btn-sm btn-info" onclick="verVenta('${venta.id}')">VER</button>`;
       acciones += ` <button class="btn btn-sm btn-secondary" onclick="cambiarEstadoVenta('${venta.id}', '${estadoDisplay}')">CAMBIAR ESTADO</button>`;
@@ -89,6 +88,7 @@ function cargarVentas() {
         acciones
       ];
     });
+
     dtInstance.clear();
     dtInstance.rows.add(filas);
     dtInstance.draw();
@@ -97,7 +97,6 @@ function cargarVentas() {
   });
 }
 
-// Función para ver la venta
 window.verVenta = async function (idVenta) {
   try {
     const ventaDoc = doc(db, "ventas", idVenta);
@@ -115,7 +114,7 @@ window.verVenta = async function (idVenta) {
             <p><strong>Empleado:</strong> ${venta.empleadoNombre || "N/A"}</p>
             <p><strong>Total:</strong> Q${Number(venta.total).toFixed(2)}</p>
             <p><strong>Método de Pago:</strong> ${venta.metodo_pago}</p>
-            <p><strong>Estado:</strong> ${venta.estado ? venta.estado : "Pendiente Envío"}</p>
+            <p><strong>Estado:</strong> ${venta.estado || "Pendiente Envío"}</p>
           </div>
         `,
         showConfirmButton: true
@@ -126,7 +125,6 @@ window.verVenta = async function (idVenta) {
   }
 };
 
-// Función para cambiar el estado de una venta (alternar entre Pendiente Envío y Enviada)
 window.cambiarEstadoVenta = function (idVenta, estadoActual) {
   const ventaDoc = doc(db, "ventas", idVenta);
   const nuevoEstado = (estadoActual === "Pendiente Envío") ? "Enviada" : "Pendiente Envío";
@@ -144,5 +142,3 @@ window.cambiarEstadoVenta = function (idVenta, estadoActual) {
     }
   });
 };
-
-
