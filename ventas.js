@@ -21,18 +21,17 @@ export let cart = [];
 // Datos del usuario y tienda  
 const usuarioActual = localStorage.getItem("loggedUser") || "admin";
 const loggedUserRole = localStorage.getItem("loggedUserRole") || "";
-// Se espera que window.currentStore esté definido (por ejemplo, asignado en aperturacaja.js o en index.html)
+// Se espera que window.currentStore esté definido
 export let currentStore = window.currentStore || "";
 
-// Si el usuario no es Admin (por ejemplo, "Sucursal"), asigna automáticamente la tienda asociada.
+// Si el usuario no es Admin, asigna automáticamente la tienda asociada.
 if (loggedUserRole.toLowerCase() !== "admin") {
   currentStore = localStorage.getItem("loggedUserStore") || currentStore;
   window.currentStore = currentStore;
 }
 
 /**
- * Genera un ID autoincremental para ventas consultando la colección "ventas".
- * Se usa el campo numérico "idVenta" para mantener la secuencia.
+ * Genera un ID autoincremental para ventas
  */
 export async function generarIdVentaCorta() {
   try {
@@ -80,7 +79,6 @@ export function parseDate(dateStr) {
 
 /**
  * Función para obtener el nombre del empleado a partir de su código.
- * Se asigna a window para uso global.
  */
 export async function getEmployeeName(codigo) {
   try {
@@ -125,7 +123,6 @@ export function listenProducts() {
 
 /**
  * Renderiza los productos en el nodo "productsBody".
- * Se asume que en el HTML existen elementos con IDs "searchInput", "sizeFilter" y "productsBody".
  */
 export function renderProducts() {
   const storeSelect = document.getElementById("storeSelect");
@@ -136,6 +133,8 @@ export function renderProducts() {
   const searchQuery = (document.getElementById("searchInput")?.value || "").toLowerCase();
   const sizeFilter = (document.getElementById("sizeFilter")?.value || "").toLowerCase();
   const tbody = document.getElementById("productsBody");
+  if (!tbody) return;
+
   tbody.innerHTML = "";
   const filtered = productos.filter(prod => {
     let matchSearch = ((prod.codigo || "").toLowerCase().includes(searchQuery) ||
@@ -228,10 +227,12 @@ export async function agregarProductoAlCarrito(productId) {
 }
 
 /**
- * Renderiza el carrito en el nodo "cartTable" y actualiza el total.
+ * Renderiza el carrito en el nodo "cartTable".
  */
 export function renderCart() {
   const tbody = document.querySelector("#cartTable tbody");
+  if (!tbody) return;
+  
   tbody.innerHTML = "";
   let total = 0;
   cart.forEach((item, idx) => {
@@ -251,12 +252,14 @@ export function renderCart() {
     });
     tbody.appendChild(tr);
   });
-  document.getElementById("totalVenta").textContent = total.toFixed(2);
+  const totalVentaEl = document.getElementById("totalVenta");
+  if (totalVentaEl) {
+    totalVentaEl.textContent = total.toFixed(2);
+  }
 }
 
 /**
- * Función auxiliar para renderizar el resumen de venta (detalle de productos)
- * que se usará en los formularios de venta.
+ * Renderiza un resumen simple del carrito (productos + total).
  */
 function renderCartSummary() {
   let total = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
@@ -273,9 +276,8 @@ function renderCartSummary() {
 }
 
 /**
- * Procesa la venta: verifica que haya caja abierta, genera el objeto venta,
- * actualiza stock y registra la venta. Se relaciona la venta con la apertura activa
- * usando window.idAperturaActivo.
+ * Procesa la venta: pide código de empleado, luego tipo de venta, y muestra
+ * formularios distintos (preventa, físico, online).
  */
 export async function procesarVenta() {
   if (!window.cajaAbierta || !window.idAperturaActivo) {
@@ -292,8 +294,36 @@ export async function procesarVenta() {
     Swal.fire("Carrito vacío", "", "warning");
     return;
   }
-  
-  // Selección del tipo de venta: "Venta Física", "Venta en Línea" y "Preventa"
+
+  // 1) Código de Empleado
+  const { value: empCodigo } = await Swal.fire({
+    title: "Código de Empleado",
+    input: "text",
+    inputLabel: "Ingrese el código de empleado (3 caracteres)",
+    inputAttributes: {
+      maxlength: 3,
+      pattern: "^[A-Za-z0-9]{3}$",
+      placeholder: "ABC"
+    },
+    preConfirm: async (value) => {
+      const code = value.trim();
+      if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
+        Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
+        return false;
+      }
+      const nombre = await window.getEmployeeName(code);
+      if (!nombre || nombre === code) {
+        Swal.showValidationMessage("Código de empleado no válido");
+        return false;
+      }
+      return code;
+    }
+  });
+  if (!empCodigo) return;
+
+  let empNombre = await window.getEmployeeName(empCodigo);
+
+  // 2) Tipo de Venta
   const { value: saleCategory } = await Swal.fire({
     title: "Tipo de Venta",
     input: "radio",
@@ -307,11 +337,13 @@ export async function procesarVenta() {
     }
   });
   if (!saleCategory) return;
-  
+
   let formData;
-  // Rama para Preventa
+
+  // ==========================================
+  // PREVENTA
+  // ==========================================
   if (saleCategory === "preventa") {
-    // Solicitar el código del cliente
     const { value: clientCode } = await Swal.fire({
       title: "Código del Cliente",
       input: "text",
@@ -321,15 +353,15 @@ export async function procesarVenta() {
         const code = Swal.getInput().value.trim();
         if (!code) {
           Swal.showValidationMessage("El código es obligatorio");
-          return;
+          return false;
         }
         return code;
       }
     });
     if (!clientCode) return;
-    let clientName = clientCode; // Se usa el mismo código como nombre por ahora
+    let clientName = clientCode;
 
-    // Mostrar formulario similar al de venta física, pero con campo "Monto de Abono"
+    // Permitir abono en cualquiera de los 3 métodos (efectivo, tarjeta, transferencia)
     const result = await Swal.fire({
       title: "Procesar Venta - Preventa",
       html: `
@@ -342,9 +374,9 @@ export async function procesarVenta() {
         <h4>Detalle de la Venta</h4>
         ${renderCartSummary()}
         <select id="metodoPago" class="swal2-select">
-          <option value="Efectivo">Efectivo</option>
-          <option value="Tarjeta">Tarjeta</option>
-          <option value="Transferencia">Transferencia</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="transferencia">Transferencia</option>
         </select>
         <div id="pagoEfectivoContainer">
           <input type="number" id="montoAbono" class="swal2-input" placeholder="Monto de Abono (Q)">
@@ -359,38 +391,40 @@ export async function procesarVenta() {
         const telefono = document.getElementById("clienteTelefono").value.trim();
         if (!nombre) {
           Swal.showValidationMessage("El nombre es obligatorio");
-          return;
+          return false;
         }
         if (!telefono) {
           Swal.showValidationMessage("El teléfono es obligatorio");
-          return;
+          return false;
         }
         let clienteData = {
           nombre,
           telefono,
           correo: document.getElementById("clienteCorreo").value.trim(),
-          direccion: document.getElementById("clienteDireccion").value.trim()
+          direccion: document.getElementById("clienteDireccion").value.trim(),
+          empNombre
         };
-        let metodo = document.getElementById("metodoPago").value;
+        let metodo = document.getElementById("metodoPago").value.toLowerCase();
         let pagoObj = { metodo };
-        if (metodo === "Efectivo") {
-          let montoAbono = parseFloat(document.getElementById("montoAbono").value) || 0;
-          if (montoAbono <= 0) {
-            Swal.showValidationMessage("El monto de abono debe ser mayor a 0");
-            return;
-          }
-          let totalSale = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
-          if (montoAbono > totalSale) {
-            Swal.showValidationMessage("El monto de abono no puede ser mayor al total de la venta");
-            return;
-          }
-          pagoObj.montoAbono = montoAbono;
+        
+        // Abono obligatorio (puede ser mayor o menor a total, con las validaciones)
+        let montoAbono = parseFloat(document.getElementById("montoAbono").value) || 0;
+        if (montoAbono <= 0) {
+          Swal.showValidationMessage("El abono debe ser mayor a 0");
+          return false;
         }
-        if (metodo === "Transferencia") {
+        let totalSale = parseFloat(document.getElementById("totalVenta")?.textContent || "0");
+        if (montoAbono > totalSale) {
+          Swal.showValidationMessage("El abono no puede exceder el total de la venta");
+          return false;
+        }
+        pagoObj.montoAbono = montoAbono;
+
+        if (metodo === "transferencia") {
           let numTransferencia = document.getElementById("numeroTransferencia").value.trim();
           if (!numTransferencia) {
             Swal.showValidationMessage("Ingrese el número de Referencia");
-            return;
+            return false;
           }
           pagoObj.numeroTransferencia = numTransferencia;
         }
@@ -401,49 +435,22 @@ export async function procesarVenta() {
         const efectivoContEl = document.getElementById("pagoEfectivoContainer");
         const transferenciaContEl = document.getElementById("numeroTransferenciaContainer");
         metodoSelect.addEventListener("change", function () {
-          if (this.value === "Efectivo") {
-            efectivoContEl.style.display = "block";
-            transferenciaContEl.style.display = "none";
-          } else if (this.value === "Transferencia") {
-            efectivoContEl.style.display = "none";
+          if (this.value.toLowerCase() === "transferencia") {
             transferenciaContEl.style.display = "block";
           } else {
-            efectivoContEl.style.display = "none";
             transferenciaContEl.style.display = "none";
           }
+          // El abono se pedirá igual, sea efectivo o tarjeta; no lo ocultamos.
         });
       }
     });
     formData = result.value;
   }
-  // Rama para Venta Física
+
+  // ==========================================
+  // VENTA FÍSICA
+  // ==========================================
   else if (saleCategory === "fisico") {
-    const { value: empCodigo } = await Swal.fire({
-      title: "Código del Empleado",
-      input: "text",
-      inputLabel: "Ingrese el código del empleado (3 caracteres)",
-      inputAttributes: {
-        maxlength: 3,
-        pattern: "^[A-Za-z0-9]{3}$",
-        placeholder: "ABC"
-      },
-      preConfirm: async () => {
-        const code = Swal.getInput().value.trim();
-        if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
-          Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
-          return;
-        }
-        const nombre = await window.getEmployeeName(code);
-        if (nombre === code) {
-          Swal.showValidationMessage("Código de empleado no válido");
-          return;
-        }
-        return code;
-      }
-    });
-    if (!empCodigo) return;
-    let empNombre = await window.getEmployeeName(empCodigo);
-    
     const result = await Swal.fire({
       title: "Procesar Venta - Física",
       html: `
@@ -456,12 +463,14 @@ export async function procesarVenta() {
         <h4>Detalle de la Venta</h4>
         ${renderCartSummary()}
         <select id="metodoPago" class="swal2-select">
-          <option value="Efectivo">Efectivo</option>
-          <option value="Tarjeta">Tarjeta</option>
-          <option value="Transferencia">Transferencia</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="transferencia">Transferencia</option>
         </select>
         <div id="pagoEfectivoContainer">
-          <input type="number" id="montoRecibido" class="swal2-input" value="${parseFloat(document.getElementById("totalVenta")?.textContent || "0")}" placeholder="Monto recibido (Q)">
+          <input type="number" id="montoRecibido" class="swal2-input" 
+                 value="${parseFloat(document.getElementById("totalVenta")?.textContent || "0")}" 
+                 placeholder="Monto recibido (Q)">
         </div>
         <div id="numeroTransferenciaContainer" style="display: none;">
           <input type="text" id="numeroTransferencia" class="swal2-input" placeholder="Número de Referencia">
@@ -473,34 +482,36 @@ export async function procesarVenta() {
         const telefono = document.getElementById("clienteTelefono").value.trim();
         if (!nombre) {
           Swal.showValidationMessage("El nombre es obligatorio");
-          return;
+          return false;
         }
         if (!telefono) {
           Swal.showValidationMessage("El teléfono es obligatorio");
-          return;
+          return false;
         }
         let clienteData = {
           nombre,
           telefono,
           correo: document.getElementById("clienteCorreo").value.trim(),
-          direccion: document.getElementById("clienteDireccion").value.trim()
+          direccion: document.getElementById("clienteDireccion").value.trim(),
+          empNombre
         };
-        let metodo = document.getElementById("metodoPago").value;
+        let metodo = document.getElementById("metodoPago").value.toLowerCase();
         let pagoObj = { metodo };
-        if (metodo === "Efectivo") {
+        if (metodo === "efectivo") {
           let montoRecibido = parseFloat(document.getElementById("montoRecibido").value) || 0;
-          if (montoRecibido < parseFloat(document.getElementById("totalVenta").textContent)) {
+          let totalVentaActual = parseFloat(document.getElementById("totalVenta").textContent) || 0;
+          if (montoRecibido < totalVentaActual) {
             Swal.showValidationMessage("Monto insuficiente para cubrir el total");
-            return;
+            return false;
           }
           pagoObj.montoRecibido = montoRecibido;
-          pagoObj.cambio = montoRecibido - parseFloat(document.getElementById("totalVenta").textContent);
+          pagoObj.cambio = montoRecibido - totalVentaActual;
         }
-        if (metodo === "Transferencia") {
+        if (metodo === "transferencia") {
           let numTransferencia = document.getElementById("numeroTransferencia").value.trim();
           if (!numTransferencia) {
             Swal.showValidationMessage("Ingrese el número de Referencia");
-            return;
+            return false;
           }
           pagoObj.numeroTransferencia = numTransferencia;
         }
@@ -511,10 +522,10 @@ export async function procesarVenta() {
         const efectivoContEl = document.getElementById("pagoEfectivoContainer");
         const transferenciaContEl = document.getElementById("numeroTransferenciaContainer");
         metodoSelect.addEventListener("change", function () {
-          if (this.value === "Efectivo") {
+          if (this.value.toLowerCase() === "efectivo") {
             efectivoContEl.style.display = "block";
             transferenciaContEl.style.display = "none";
-          } else if (this.value === "Transferencia") {
+          } else if (this.value.toLowerCase() === "transferencia") {
             efectivoContEl.style.display = "none";
             transferenciaContEl.style.display = "block";
           } else {
@@ -525,35 +536,12 @@ export async function procesarVenta() {
       }
     });
     formData = result.value;
-    formData.clienteData.empNombre = empNombre;
   }
-  // Rama para Venta en Línea
+
+  // ==========================================
+  // VENTA EN LÍNEA
+  // ==========================================
   else if (saleCategory === "online") {
-    const { value: empCodigo } = await Swal.fire({
-      title: "Código del Empleado",
-      input: "text",
-      inputLabel: "Ingrese el código del empleado (3 caracteres)",
-      inputAttributes: {
-        maxlength: 3,
-        pattern: "^[A-Za-z0-9]{3}$",
-        placeholder: "ABC"
-      },
-      preConfirm: async () => {
-        const code = Swal.getInput().value.trim();
-        if (!code || !/^[A-Za-z0-9]{3}$/.test(code)) {
-          Swal.showValidationMessage("El código debe tener 3 caracteres alfanuméricos");
-          return;
-        }
-        const nombre = await window.getEmployeeName(code);
-        if (nombre === code) {
-          Swal.showValidationMessage("Código de empleado no válido");
-          return;
-        }
-        return code;
-      }
-    });
-    if (!empCodigo) return;
-    let empNombre = await window.getEmployeeName(empCodigo);
     const result = await Swal.fire({
       title: "Procesar Venta - En Línea",
       html: `
@@ -564,10 +552,16 @@ export async function procesarVenta() {
         <input type="text" id="clienteDireccion" class="swal2-input" placeholder="Dirección (opc)">
         <hr>
         <h4>Detalle de la Venta</h4>
-        ${cart.map(item => `<p>${item.producto} (${item.producto_codigo}) x ${item.cantidad} = Q${(item.cantidad*item.precio).toFixed(2)}</p>`).join('')}
-        <h4>Total Venta: Q${(parseFloat(document.getElementById("totalVenta").textContent) || 0).toFixed(2)}</h4>
+        ${renderCartSummary()}
+        <!-- Métodos de pago en línea: tarjeta, transferencia, contraentrega -->
+        <select id="metodoPagoOnline" class="swal2-select">
+          <option value="tarjeta">Tarjeta</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="contraentrega">Pago contra entrega</option>
+        </select>
+        <br>
         <input type="text" id="guia" class="swal2-input" placeholder="Guía" required>
-        <input type="text" id="comprobantePago" class="swal2-input" placeholder="Comprobante de Pago" required>
+        <input type="text" id="comprobantePago" class="swal2-input" placeholder="Comprobante de Pago (si aplica)">
         <textarea id="comentarioVenta" class="swal2-textarea" placeholder="Comentario (opcional)"></textarea>
       `,
       focusConfirm: false,
@@ -576,30 +570,29 @@ export async function procesarVenta() {
         const telefono = document.getElementById("clienteTelefono").value.trim();
         if (!nombre) {
           Swal.showValidationMessage("El nombre es obligatorio");
-          return;
+          return false;
         }
         if (!telefono) {
           Swal.showValidationMessage("El teléfono es obligatorio");
-          return;
+          return false;
         }
-        let comprobante = document.getElementById("comprobantePago").value.trim();
-        if (!comprobante) {
-          Swal.showValidationMessage("El comprobante de pago es obligatorio");
-          return;
-        }
-        const guia = document.getElementById("guia").value.trim();
+        let guia = document.getElementById("guia").value.trim();
         if (!guia) {
           Swal.showValidationMessage("El campo Guía es obligatorio");
-          return;
+          return false;
         }
+        let comprobante = document.getElementById("comprobantePago").value.trim();
+        
+        let metodo = document.getElementById("metodoPagoOnline").value.toLowerCase();
         let clienteData = {
           nombre,
           telefono,
           correo: document.getElementById("clienteCorreo").value.trim(),
-          direccion: document.getElementById("clienteDireccion").value.trim()
+          direccion: document.getElementById("clienteDireccion").value.trim(),
+          empNombre
         };
         let pagoObj = {
-          metodo: "En Línea",
+          metodo,
           comprobante,
           guia,
           comentario: document.getElementById("comentarioVenta").value.trim()
@@ -611,8 +604,8 @@ export async function procesarVenta() {
   }
   
   if (!formData) return;
-  
-  // Construir la venta, asociándola a la apertura activa (idApertura = window.idAperturaActivo)
+
+  // Construir el objeto de la venta
   let totalVenta = parseFloat(document.getElementById("totalVenta").textContent) || 0;
   let venta = {
     idVenta: await generarIdVentaCorta(),
@@ -627,23 +620,24 @@ export async function procesarVenta() {
       subtotal: item.cantidad * item.precio
     })),
     total: totalVenta,
-    metodo_pago: formData.pagoObj.metodo,
-    cambio: formData.pagoObj.cambio || 0,
+    metodo_pago: (formData.pagoObj?.metodo || "").toLowerCase(),
+    cambio: formData.pagoObj?.cambio || 0,
     usuario: usuarioActual,
     idApertura: window.idAperturaActivo,
-    empleadoNombre: formData.clienteData.empNombre || "",
-    numeroTransferencia: formData.pagoObj.numeroTransferencia || "",
+    empleadoNombre: formData.clienteData?.empNombre || "",
+    numeroTransferencia: formData.pagoObj?.numeroTransferencia || "",
     guia: formData.guia || "",
-    montoAbono: formData.pagoObj.montoAbono || 0,
-    tipoVenta: saleCategory
+    montoAbono: formData.pagoObj?.montoAbono || 0,
+    tipoVenta: saleCategory,
+    comentario: formData.pagoObj?.comentario || ""
   };
 
-  // Asignar el código de venta o preventa según el tipo
-  venta.codigo = saleCategory === "preventa" ? "PREV-" + venta.idVenta : "VENTA-" + venta.idVenta;
+  // Código interno: "PREV-123" si es preventa, "VENTA-123" si no
+  venta.codigo = (saleCategory === "preventa")
+    ? "PREV-" + venta.idVenta
+    : "VENTA-" + venta.idVenta;
 
-  console.log("Venta a registrar:", venta);
-
-  // Actualizar stock mediante batch
+  // Actualizar stock
   const batch = writeBatch(db);
   for (let item of cart) {
     let prodRef = doc(db, "productos", item.productId);
@@ -661,6 +655,7 @@ export async function procesarVenta() {
   }
   let ventaRef = doc(collection(db, "ventas"));
   batch.set(ventaRef, venta);
+  
   try {
     await batch.commit();
     Swal.fire({
@@ -679,12 +674,11 @@ export async function procesarVenta() {
   }
 }
 
-// Función stub para la preventa (se mantiene en caso de necesitarse en el futuro)
+// Función stub para la preventa
 export async function procesarPreventa() {
   Swal.fire("Preventa", "Funcionalidad de preventa no implementada.", "info");
 }
 
-// Exponer funciones globalmente para uso en HTML u otros módulos
 window.procesarVenta = procesarVenta;
 window.procesarPreventa = procesarPreventa;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
@@ -707,6 +701,9 @@ document.addEventListener("DOMContentLoaded", () => {
   listenProducts();
 });
 
+/**
+ * Genera un comprobante HTML para la venta y permite descargarlo.
+ */
 window.descargarComprobante = function(venta) {
   let comprobanteHtml = `
     <h2>Comprobante de Venta</h2>
@@ -714,9 +711,8 @@ window.descargarComprobante = function(venta) {
     <p><strong>Fecha:</strong> ${new Date(venta.fecha).toLocaleString()}</p>
     <p><strong>Empleado:</strong> ${venta.empleadoNombre}</p>
     <p><strong>Cliente:</strong> ${venta.cliente.nombre}</p>
-     <p><strong>Número de Guía:</strong> ${venta.cliente.guia}</p>
+    <p><strong>Número de Guía:</strong> ${venta.guia || ""}</p>
   `;
-  // Mostrar el código de preventa o venta según corresponda
   if (venta.tipoVenta === "preventa") {
     comprobanteHtml += `<p><strong>Código Preventa:</strong> ${venta.codigo}</p>`;
   } else {
@@ -726,10 +722,14 @@ window.descargarComprobante = function(venta) {
     <hr>
     <h3>Detalle de Productos</h3>
     <ul>
-      ${venta.productos.map(prod => `<li>${prod.producto_nombre} (${prod.producto_codigo}) - Cant: ${prod.cantidad} x Q${prod.precio_unitario.toFixed(2)} = Q${prod.subtotal.toFixed(2)}</li>`).join('')}
+      ${venta.productos.map(prod => 
+        `<li>${prod.producto_nombre} (${prod.producto_codigo}) 
+             - Cant: ${prod.cantidad} x Q${prod.precio_unitario.toFixed(2)} 
+             = Q${prod.subtotal.toFixed(2)}</li>`
+      ).join('')}
     </ul>
     <hr>
-    <p><strong>Total:</strong> Q${venta.total.toFixed(2)}</p>
+    <p><strong>Total (Venta Completa):</strong> Q${venta.total.toFixed(2)}</p>
   `;
   if (venta.tipoVenta === "preventa") {
     let montoAbono = venta.montoAbono || 0;
@@ -739,6 +739,11 @@ window.descargarComprobante = function(venta) {
       <p><strong>Monto Pendiente:</strong> Q${pendiente.toFixed(2)}</p>
     `;
   }
+  // Si es venta en línea y existe comentario
+  if (venta.tipoVenta === "online" && venta.comentario) {
+    comprobanteHtml += `<p><strong>Comentario:</strong> ${venta.comentario}</p>`;
+  }
+
   let blob = new Blob([comprobanteHtml], { type: "text/html" });
   let url = URL.createObjectURL(blob);
   let a = document.createElement("a");
@@ -748,6 +753,7 @@ window.descargarComprobante = function(venta) {
   a.click();
   document.body.removeChild(a);
 };
+
 
 document.addEventListener("DOMContentLoaded", () => {
   const storeSelect = document.getElementById("storeSelect");
