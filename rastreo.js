@@ -21,6 +21,9 @@ const isAdmin = loggedUserRole === "admin";
 // Inicialización: espera a que el DOM esté listo y crea la DataTable solo una vez.
 $(document).ready(function () {
   dtInstance = $("#ventasTable").DataTable({
+    pageLength: 5,
+      lengthMenu: [[5, 10, 25, 30], [5, 10, 25, 30]],
+     
     language: {
       url: "https://cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json"
     },
@@ -47,41 +50,33 @@ $(document).ready(function () {
 
 // Función para cargar y actualizar las ventas (filtrando manualmente ventas en línea)
 function cargarVentas() {
-  console.log("Ejecutando cargarVentas()...");
   const ventasRef = collection(db, "ventas");
   const q = query(ventasRef, orderBy("fecha", "desc"));
-  console.log("Consulta creada:", q);
 
   onSnapshot(q, (snapshot) => {
-    console.log("onSnapshot activado. Documentos obtenidos:", snapshot.size);
     let ventasEnLinea = [];
+
     snapshot.forEach((docSnap) => {
       let venta = docSnap.data();
-      console.log("Venta obtenida:", venta);
-      // Comparación insensible a mayúsculas para el método de pago
-      if (venta.metodo_pago && venta.metodo_pago.trim().toLowerCase() === "en línea") {
+
+      // Filtrar por tipoVenta === "online"
+      if (venta.tipoVenta && venta.tipoVenta.trim().toLowerCase() === "online") {
         ventasEnLinea.push({ id: docSnap.id, ...venta });
-      } else {
-        console.warn("Venta omitida, método:", venta.metodo_pago);
       }
     });
-    console.log("Ventas en línea filtradas:", ventasEnLinea.length);
 
-    // Crear arreglo de filas con 9 columnas, en el mismo orden que la DataTable
     const filas = ventasEnLinea.map((venta) => {
       let idVentaMostrar = venta.idVenta ? Number(venta.idVenta) : venta.id;
-      // Extraer la parte de la fecha (YYYY-MM-DD) o formatear la fecha completa
       const fechaVenta = venta.fecha ? new Date(venta.fecha).toLocaleString() : "";
-      const clienteDisplay = venta.cliente && typeof venta.cliente === "object" ? venta.cliente.nombre || "" : (venta.cliente || "");
+      const clienteDisplay = venta.cliente?.nombre || "";
       const empleadoDisplay = venta.empleadoNombre || "N/A";
       const metodoPagoDisplay = venta.metodo_pago || "";
       const totalVentaDisplay = venta.total ? Number(venta.total).toFixed(2) : "0.00";
       const estadoDisplay = venta.estado ? venta.estado : "Pendiente Envío";
+
       let acciones = `<button class="btn btn-sm btn-info" onclick="verVenta('${venta.id}')">VER</button>`;
-      if (loggedUserRole === "admin") {
-      }
       acciones += ` <button class="btn btn-sm btn-secondary" onclick="cambiarEstadoVenta('${venta.id}', '${estadoDisplay}')">CAMBIAR ESTADO</button>`;
-      
+
       return [
         venta.guia || "",
         idVentaMostrar,
@@ -94,8 +89,6 @@ function cargarVentas() {
         acciones
       ];
     });
-
-    // Actualizamos la DataTable sin destruir la instancia
     dtInstance.clear();
     dtInstance.rows.add(filas);
     dtInstance.draw();

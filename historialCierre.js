@@ -78,7 +78,7 @@ export async function loadHistorialCierre(filterDate = "") {
     }
 
     dtInstance = $("#tablaCierres").DataTable({
-      pageLength: 10,
+      pageLength: 5,
       lengthMenu: [[5, 10, 25, 30], [5, 10, 25, 30]],
       language: {
         search: "Buscar:",
