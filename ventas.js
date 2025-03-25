@@ -13,6 +13,8 @@ import {
   addDoc,
   limit
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+import { processPreventaPayment } from "./preventa.js"; // Asegúrate de que en preventa.js exportes esta función.
+
 
 // Variables globales para Ventas
 let productos = [];
@@ -829,8 +831,47 @@ export async function procesarPreventa() {
   Swal.fire("Preventa", "Funcionalidad de preventa no implementada.", "info");
 }
 
+async function procesarPreventaFlow() {
+  // 1. Solicitar el código del cliente
+  const { value: clientCode } = await Swal.fire({
+    title: "Código del Cliente",
+    input: "text",
+    inputPlaceholder: "Ingrese el código del cliente",
+    preConfirm: () => {
+      const code = Swal.getInput().value.trim();
+      if (!code) {
+        Swal.showValidationMessage("El código es obligatorio");
+      }
+      return code;
+    }
+  });
+  if (!clientCode) return;
+
+  // 2. Buscar en la colección "preventas" para verificar el registro del cliente
+  try {
+    const preventasRef = collection(db, "preventas");
+    const q = query(preventasRef, where("codigoCliente", "==", clientCode.toUpperCase()));
+    const snapshot = await getDocs(q);
+  
+    if (snapshot.empty) {
+      Swal.fire("No encontrado", "No se encontró una preventa para ese cliente.", "error");
+      return;
+    }
+  
+    // 3. Llamar a la función de procesamiento de pago de preventa
+    await processPreventaPayment(clientCode);
+  
+    Swal.fire("Proceso completado", "La preventa se procesó correctamente.", "success");
+  } catch (error) {
+    console.error("Error al procesar preventa:", error);
+    Swal.fire("Error", "Ocurrió un error al buscar la preventa.", "error");
+  }
+}
+
+
 window.procesarVenta = procesarVenta;
 window.procesarPreventa = procesarPreventa;
+window.procesarPreventa = procesarPreventaFlow;
 window.agregarProductoAlCarrito = agregarProductoAlCarrito;
 window.renderCart = renderCart;
 window.listenProducts = listenProducts;
@@ -887,7 +928,6 @@ export function renderSidebarCart() {
   // Se añaden los botones de Procesar Venta y Ver Preventas al sidebar
   html += `
     <button class="btn btn-success mt-2" onclick="procesarVenta()">Procesar Venta</button>
-    <a href="preventas.html" class="btn btn-info mt-2">Procesar Preventa</a>
   `;
   sidebarCartContainer.innerHTML = html;
 }
