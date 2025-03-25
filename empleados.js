@@ -8,12 +8,14 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  onSnapshot
+  onSnapshot,
+  where
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
 // Se lee el rol del usuario desde localStorage
 const loggedUserRole = (localStorage.getItem("loggedUserRole") || "").toLowerCase();
 const isAdmin = loggedUserRole === "admin";
+const loggedUserStore = localStorage.getItem("loggedUserStore") || "";
 
 let empleados = [];
 const empleadosBody = document.getElementById("empleadosBody");
@@ -62,9 +64,14 @@ async function loadTiendas() {
   }
 }
 
-// Escuchar la colección "empleados" en tiempo real
+// Escuchar la colección "empleados" en tiempo real, filtrando por tienda según usuario
 function listenEmpleados() {
-  const empleadosRef = collection(db, "empleados");
+  let empleadosRef = collection(db, "empleados");
+
+  if (!isAdmin && loggedUserStore) {
+    empleadosRef = query(empleadosRef, where("tienda", "==", loggedUserStore));
+  }
+
   onSnapshot(
     empleadosRef,
     (snapshot) => {
@@ -108,7 +115,6 @@ function renderEmpleados() {
         </td>
       `;
     } else {
-      // Para usuarios de rol sucursal: solo se muestran Nombre y Tienda
       tr.innerHTML = `
         <td>${emp.nombre}</td>
         <td>${emp.tienda || ""}</td>
@@ -117,6 +123,7 @@ function renderEmpleados() {
     empleadosBody.appendChild(tr);
   });
 }
+
 
 // Manejo del formulario (solo admin)
 document.getElementById("empleadoForm").addEventListener("submit", async (e) => {
