@@ -915,13 +915,13 @@ function crearSidebarCaja() {
     #sidebarCaja {
       position: fixed;
       top: 0;
-      left: 0;
+      right: 0;
       width: 350px;
       height: 100%;
       background: #f8f9fa;
-      border-right: 1px solid #ddd;
+      border-left: 1px solid #ddd;
       padding: 10px;
-      transform: translateX(-320px);
+      transform: translateX(320px);
       transition: transform 0.3s ease;
       z-index: 1000;
       overflow-y: auto;
@@ -937,7 +937,7 @@ function crearSidebarCaja() {
     #sidebarToggle {
       position: fixed;
       top: 10px;
-      left: 10px;
+      right: 10px;
       background: #007bff;
       color: #fff;
       border: none;
