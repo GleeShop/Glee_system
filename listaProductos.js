@@ -502,17 +502,18 @@ function getCurrentStock(product, store = currentStore) {
  * FUNCIONES CRUD PARA PRODUCTOS - CARGA MASIVA
  *********************************************/
 async function cargarConCadenaTexto() {
-  // Si es admin debe haberse seleccionado una tienda para asignar el stock
+  // Verificar si es admin y que haya seleccionado una tienda
   if (loggedUserRole.toLowerCase() === "admin" && !currentStore) {
     Swal.fire("Error", "Debes seleccionar una tienda en el filtro antes de cargar inventario.", "error");
     return;
   }
+
   // Definir la tienda a utilizar según el rol
   const storeKey = currentStore || loggedUserStore;
 
   const { value: textData } = await Swal.fire({
     title: "Cargar Productos en Masa",
-    html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Ingresa los productos en formato CSV:&#10;Código,Descripción,Talla,Precio,Color,Stock (opcional)"></textarea>`,
+    html: `<textarea id="swal-textarea" class="swal2-textarea" placeholder="Código,Descripción,Talla,Precio,Color,Stock"></textarea>`,
     focusConfirm: false,
     preConfirm: () => {
       const text = document.getElementById("swal-textarea").value.trim();
@@ -523,75 +524,85 @@ async function cargarConCadenaTexto() {
       return text;
     }
   });
+
   if (!textData) return;
 
-  // Se asume que cada línea es un producto separado por salto de línea
-  const lines = textData.split("\n").filter(line => line.trim() !== "");
-  let productosNuevos = [];
+  // Procesar los datos ingresados línea por línea
+  const lines = textData.split("\n").map(line => line.trim()).filter(line => line !== "");
+  let productosProcesados = [];
+
   lines.forEach(line => {
     const parts = line.split(",").map(item => item.trim());
-    if (parts.length < 5) {
-      // Se requieren al menos 5 campos: Código, Descripción, Talla, Precio, Color
+
+    if (parts.length < 6) {
+      console.warn("Línea inválida (menos de 6 valores):", line);
       return;
     }
-    const codigo = parts[0];
-    const descripcion = parts[1];
-    const talla = parts[2];
-    const precio = parseFloat(parts[3]);
-    const color = parts[4];
-    if (!codigo || !descripcion || isNaN(precio) || precio <= 0 || !color) {
-      // Si algún dato no es válido, se omite la línea
+
+    const codigo = parts[0] || "";
+    const descripcion = parts[1] || "";
+    const talla = parts[2] || "";
+    const precio = parseFloat(parts[3].replace("Q", "").trim()); // Elimina "Q" y convierte a número
+    const color = parts[4] || "";
+    let stock = parseInt(parts[5]);
+
+    if (!codigo || !descripcion || !color || isNaN(precio) || precio <= 0) {
+      console.warn("Producto inválido (datos incorrectos):", parts);
       return;
     }
-    // Stock es opcional; si se incluye, se asigna al inventario de la tienda actual
-    let stock = {};
-    if (parts.length >= 6) {
-      const s = parseInt(parts[5]);
-      stock = { [storeKey]: isNaN(s) ? 0 : s };
+
+    if (isNaN(stock) || stock < 0) {
+      stock = 0;
     }
-    const nuevoProducto = {
-      codigo,
-      descripcion,
-      talla,
-      precio,
-      color,
-      stock,
-      createdAt: new Date().toISOString()
-    };
-    productosNuevos.push(nuevoProducto);
+
+    productosProcesados.push({ codigo, descripcion, talla, precio, color, stock });
   });
 
-  if (productosNuevos.length === 0) {
+  if (productosProcesados.length === 0) {
     Swal.fire("Atención", "No se encontraron productos válidos en los datos ingresados", "warning");
     return;
   }
 
   try {
-    // Para cada producto, se verifica si existe (por código) y se actualiza su stock o se crea uno nuevo
-    const promises = productosNuevos.map(async prod => {
+    const batch = [];
+
+    for (const prod of productosProcesados) {
       const productQuery = query(collection(db, "productos"), where("codigo", "==", prod.codigo));
       const querySnapshot = await getDocs(productQuery);
+
       if (querySnapshot.empty) {
-        // Producto no existe, se crea
-        await addDoc(collection(db, "productos"), prod);
+        // Si el producto no existe, se crea con stock en la tienda actual
+        const nuevoProducto = {
+          codigo: prod.codigo,
+          descripcion: prod.descripcion,
+          talla: prod.talla,
+          precio: prod.precio,
+          color: prod.color,
+          stock: { [storeKey]: prod.stock },
+          createdAt: new Date().toISOString()
+        };
+        batch.push(addDoc(collection(db, "productos"), nuevoProducto));
       } else {
-        // Producto existe, se actualiza el stock para la tienda correspondiente
+        // Si el producto ya existe, solo se actualiza el stock en la tienda correspondiente
         const existingDoc = querySnapshot.docs[0];
         const existingData = existingDoc.data();
-        let updatedStock = {};
-        if (existingData.stock && typeof existingData.stock === "object") {
-          updatedStock = { ...existingData.stock };
-        }
-        updatedStock[storeKey] = prod.stock[storeKey] !== undefined ? prod.stock[storeKey] : 0;
-        await updateDoc(doc(db, "productos", existingDoc.id), { stock: updatedStock });
+        let updatedStock = existingData.stock && typeof existingData.stock === "object" ? { ...existingData.stock } : {};
+
+        // SUMAR stock al existente en la tienda en lugar de sobrescribirlo
+        updatedStock[storeKey] = (updatedStock[storeKey] || 0) + prod.stock;
+
+        batch.push(updateDoc(doc(db, "productos", existingDoc.id), { stock: updatedStock }));
       }
-    });
-    await Promise.all(promises);
-    Swal.fire("Productos cargados", `${productosNuevos.length} productos fueron cargados/actualizados correctamente`, "success");
+    }
+
+    await Promise.all(batch);
+    Swal.fire("Carga exitosa", `${productosProcesados.length} productos han sido cargados o actualizados correctamente.`, "success");
+
   } catch (error) {
     Swal.fire("Error", "No se pudo cargar los productos: " + error.message, "error");
   }
 }
+
 
 /*********************************************
  * INICIALIZACIÓN DE LA PÁGINA Y ASIGNACIÓN DE EVENTOS

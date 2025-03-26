@@ -1101,6 +1101,32 @@ window.procesarModalPreventa = async function() {
   }
 };
 
+window.renderCart = function() {
+  console.log("Renderizando carrito...");
+  
+  const tbody = document.querySelector("#cartTable tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+  let total = 0;
+  cart.forEach((item, idx) => {
+      let subtotal = item.cantidad * item.precio;
+      total += subtotal;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+          <td>${item.producto}<br><small>${item.producto_codigo}</small></td>
+          <td>${item.cantidad}</td>
+          <td>Q ${item.precio.toFixed(2)}</td>
+          <td>Q ${subtotal.toFixed(2)}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="removeFromCart(${idx})">❌</button></td>
+      `;
+      tbody.appendChild(tr);
+  });
+
+  document.getElementById("totalVenta").textContent = total.toFixed(2);
+};
+
+
 
 
 window.procesarVenta = procesarVenta;
