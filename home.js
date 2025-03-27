@@ -79,7 +79,10 @@ window.toggleSidebar = function () {
   sidebar.classList.toggle('show');
 };
 
-
+window.logout = function () {
+  localStorage.removeItem("loggedUser");
+  window.location.href = "login.html";
+};
 
 document.addEventListener("DOMContentLoaded", async function () {
   const loggedUser = localStorage.getItem("loggedUser");
