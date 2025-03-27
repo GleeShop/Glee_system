@@ -234,6 +234,7 @@ export function renderProducts() {
     tr.innerHTML = `
       <td>${prod.codigo}</td>
       <td>${prod.descripcion}</td>
+      <td>${prod.color}</td>
       <td>${prod.talla || ""}</td>
       <td>Q ${parseFloat(prod.precio || 0).toFixed(2)}</td>
       <td>${stockDisplay}</td>
