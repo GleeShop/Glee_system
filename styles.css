@@ -91,17 +91,28 @@ body {
 
 /* Contenedor principal: se desplaza a la derecha del menú */
 #content {
-  margin-left: 250px;
+  margin-left: 250px; /* para dejar espacio al sidebar */
   padding: 20px;
-  width: calc(100% - 250px);
+  width: calc(100% - 250px); /* ocupa el resto del ancho */
+  box-sizing: border-box;
 }
 
-/* Ajusta el iframe para ocupar casi todo el espacio vertical */
+@media (max-width: 768px) {
+  #content {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 #contentFrame {
   width: 100%;
-  height: 90vh;
+  height: calc(100vh - 40px); /* altura total menos padding */
   border: none;
+  display: block;
+  margin: 0 auto; /* centrar si hace falta */
+  box-sizing: border-box;
 }
+
 
 .table-responsive {
   margin-top: 20px;
