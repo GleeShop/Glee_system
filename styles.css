@@ -147,3 +147,43 @@ h5 {
   margin-right: 6
   0px; /* Espacio para que la tabla no se superponga con el sidebar */
 }
+
+/* Estilos para que el sidebar sea responsive */
+#sidebar {
+  width: 250px;
+  background-color: #f8f9fa;
+  height: 100vh;
+  position: fixed;
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+  z-index: 1000;
+}
+
+/* Escondido en móvil por defecto */
+@media (max-width: 768px) {
+  #sidebar {
+    transform: translateX(-100%);
+  }
+
+  #sidebar.show {
+    transform: translateX(0);
+  }
+
+  .toggle-btn {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1100;
+  }
+
+  #content {
+    margin-left: 0 !important;
+  }
+}
+
+
+#content {
+  margin-left: 250px;
+  padding: 20px;
+  transition: margin-left 0.3s ease;
+}

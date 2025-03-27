@@ -66,10 +66,19 @@ window.applyMenuPermissions = function (userData) {
   }
 };
 
+//barra responsive 
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('show');
+}
+
 window.logout = function () {
   localStorage.removeItem("loggedUser");
   window.location.href = "index.html";
 };
+
+
 
 document.addEventListener("DOMContentLoaded", async function () {
   const loggedUser = localStorage.getItem("loggedUser");
