@@ -73,9 +73,10 @@ function toggleSidebar() {
   sidebar.classList.toggle('show');
 }
 
-window.logout = function () {
-  localStorage.removeItem("loggedUser");
-  window.location.href = "index.html";
+// ✅ Sidebar responsive toggle
+window.toggleSidebar = function () {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('show');
 };
 
 
@@ -107,3 +108,4 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   }
 });
+
