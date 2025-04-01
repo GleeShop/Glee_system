@@ -20,24 +20,18 @@ console.log("db =>", db);
 // Variables globales
 let allProducts = [];
 let invoiceItems = [];
-
-// Variable global para almacenar la fila actual al seleccionar producto en el modal
 let currentProductRow = null;
 
 // Leer datos del usuario (rol y tienda) desde localStorage
 const loggedUserRole  = localStorage.getItem("loggedUserRole")  || "";
 const loggedUserStore = localStorage.getItem("loggedUserStore") || "";
-
-// Variable para definir la tienda a filtrar
 let currentStore = "";
 
-// Decidir si es admin o no => mostrar filtro de tienda o forzar la tienda
+// Decidir si es admin o no
 if (loggedUserRole.toLowerCase() === "admin") {
-  // Es admin: se muestra el filtro de tienda
   document.getElementById("adminStoreFilter").style.display = "block";
   document.getElementById("invoiceTitle").textContent = "Registro de Facturas (Todas las Tiendas)";
 } else {
-  // No es admin: forzar la tienda del usuario
   currentStore = loggedUserStore || "DefaultStore";
   document.getElementById("invoiceTitle").textContent = `Registro de Facturas: ${currentStore}`;
 }
@@ -63,35 +57,25 @@ async function loadStoreFilter() {
   }
 }
 
-// Si es admin, cargar el combo de tiendas y setear evento
 if (loggedUserRole.toLowerCase() === "admin") {
   document.addEventListener("DOMContentLoaded", () => {
     loadStoreFilter();
     document.getElementById("storeSelect").addEventListener("change", function () {
       currentStore = this.value;
-      if (currentStore) {
-        document.getElementById("invoiceTitle").textContent = `Registro de Facturas: ${currentStore}`;
-      } else {
-        document.getElementById("invoiceTitle").textContent = "Registro de Facturas (Todas las Tiendas)";
-      }
+      document.getElementById("invoiceTitle").textContent =
+        currentStore ? `Registro de Facturas: ${currentStore}` : "Registro de Facturas (Todas las Tiendas)";
       loadInvoices();
     });
   });
 }
 
 /*****************************************************
- * CARGAR PRODUCTOS (opcionalmente se puede filtrar)
+ * CARGAR PRODUCTOS
  *****************************************************/
-async function loadAllProductsForInvoice(storeName = "") {
+async function loadAllProductsForInvoice() {
   try {
     const productosRef = collection(db, "productos");
-    let q;
-    // Si se requiere filtrar se podría implementar
-    if (storeName) {
-      q = query(productosRef, orderBy("codigo"));
-    } else {
-      q = query(productosRef, orderBy("codigo"));
-    }
+    const q = query(productosRef, orderBy("codigo"));
     const snapshot = await getDocs(q);
     allProducts = [];
     snapshot.forEach((docSnap) => {
@@ -114,9 +98,8 @@ async function showAddInvoiceForm() {
   document.getElementById("invoiceOverallTotal").value = "";
 
   await loadInvoiceStores();
-  await loadAllProductsForInvoice(); // Cargar productos
+  await loadAllProductsForInvoice();
 
-  // Si no es admin => forzar la tienda del localStorage
   if (loggedUserRole.toLowerCase() !== "admin") {
     document.getElementById("invoiceStore").value = loggedUserStore;
   }
@@ -133,11 +116,11 @@ async function showAddInvoiceForm() {
 async function loadInvoiceStores() {
   try {
     const tiendasRef = collection(db, "tiendas");
-    const qTiendas   = query(tiendasRef, orderBy("nombre"));
-    const snapshot   = await getDocs(qTiendas);
+    const qTiendas = query(tiendasRef, orderBy("nombre"));
+    const snapshot = await getDocs(qTiendas);
     const storeSelect = document.getElementById("invoiceStore");
     storeSelect.innerHTML = "<option value=''>Seleccione tienda</option>";
-    snapshot.forEach(docSnap => {
+    snapshot.forEach((docSnap) => {
       const store = docSnap.data();
       const option = document.createElement("option");
       option.value = store.nombre;
@@ -156,13 +139,13 @@ function addInvoiceItem() {
   const tbody = document.querySelector("#invoiceItemsTable tbody");
   const row = tbody.insertRow();
 
-  // Celda producto: botón para abrir el modal de selección
+  // Celda producto
   const cellProduct = row.insertCell(0);
   const btnSelectProduct = document.createElement("button");
   btnSelectProduct.type = "button";
   btnSelectProduct.className = "btn btn-outline-secondary";
   btnSelectProduct.textContent = "Seleccionar producto";
-  btnSelectProduct.addEventListener("click", function() {
+  btnSelectProduct.addEventListener("click", function () {
     showProductSelectionModal(row);
   });
   cellProduct.appendChild(btnSelectProduct);
@@ -174,9 +157,7 @@ function addInvoiceItem() {
   quantityInput.name = "quantity";
   quantityInput.className = "form-control";
   quantityInput.value = "0";
-  quantityInput.addEventListener("input", function() {
-    updateInvoiceItemRow(row);
-  });
+  quantityInput.addEventListener("input", () => updateInvoiceItemRow(row));
   cellQuantity.appendChild(quantityInput);
 
   // Celda precio
@@ -210,7 +191,6 @@ function addInvoiceItem() {
 /*****************************************************
  * FUNCIONES DEL MODAL DE SELECCIÓN DE PRODUCTOS
  *****************************************************/
-// Abre el modal para seleccionar producto y asocia la fila actual
 function showProductSelectionModal(row) {
   currentProductRow = row;
   renderProductList(allProducts);
@@ -218,7 +198,6 @@ function showProductSelectionModal(row) {
   new bootstrap.Modal(document.getElementById("productSelectionModal")).show();
 }
 
-// Renderiza la lista de productos en el contenedor del modal
 function renderProductList(products) {
   const container = document.getElementById("productListContainer");
   container.innerHTML = "";
@@ -226,42 +205,34 @@ function renderProductList(products) {
     container.textContent = "No se encontraron productos.";
     return;
   }
-  products.forEach(prod => {
+  products.forEach((prod) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "list-group-item list-group-item-action";
     btn.textContent = `${prod.codigo} - ${prod.descripcion}`;
-    btn.addEventListener("click", function() {
-      selectProductForRow(prod);
-    });
+    btn.addEventListener("click", () => selectProductForRow(prod));
     container.appendChild(btn);
   });
 }
 
-// Filtrar productos en el modal al escribir en el input
-document.getElementById("productSearchInput").addEventListener("input", function() {
+document.getElementById("productSearchInput").addEventListener("input", function () {
   const searchTerm = this.value.toLowerCase();
-  const filteredProducts = allProducts.filter(prod =>
-    (prod.codigo && prod.codigo.toLowerCase().includes(searchTerm)) ||
-    (prod.descripcion && prod.descripcion.toLowerCase().includes(searchTerm))
+  const filteredProducts = allProducts.filter(
+    (prod) =>
+      (prod.codigo && prod.codigo.toLowerCase().includes(searchTerm)) ||
+      (prod.descripcion && prod.descripcion.toLowerCase().includes(searchTerm))
   );
   renderProductList(filteredProducts);
 });
 
-// Actualiza la fila de la factura con el producto seleccionado
 function selectProductForRow(product) {
   if (!currentProductRow) return;
-  // Actualiza la celda del producto con el nombre y código
   const cellProduct = currentProductRow.cells[0];
   cellProduct.textContent = `${product.codigo} - ${product.descripcion}`;
-  // Guarda el id del producto en un atributo de la fila
   currentProductRow.setAttribute("data-product-id", product.id);
-  // Actualiza el precio del producto en la celda correspondiente
   const priceInput = currentProductRow.cells[2].querySelector("input[name='price']");
   priceInput.value = product.precio || "0";
-  // Actualiza el total de la fila
   updateInvoiceItemRow(currentProductRow);
-  // Cierra el modal
   bootstrap.Modal.getInstance(document.getElementById("productSelectionModal")).hide();
 }
 
@@ -270,11 +241,10 @@ function selectProductForRow(product) {
  *****************************************************/
 function updateInvoiceItemRow(row) {
   const quantity = parseFloat(row.cells[1].querySelector("input[name='quantity']").value);
-  const price    = parseFloat(row.cells[2].querySelector("input[name='price']").value);
-  const total    = isNaN(quantity * price) ? 0 : quantity * price;
+  const price = parseFloat(row.cells[2].querySelector("input[name='price']").value);
+  const total = isNaN(quantity * price) ? 0 : quantity * price;
   row.cells[3].textContent = total.toFixed(2);
 
-  // Reconstruir el arreglo invoiceItems recorriendo las filas de la tabla
   const tbody = document.querySelector("#invoiceItemsTable tbody");
   let items = [];
   for (let r of tbody.rows) {
@@ -309,7 +279,7 @@ function renderInvoiceItems() {
 }
 
 function getProductText(productId) {
-  const prod = allProducts.find(p => p.id === productId);
+  const prod = allProducts.find((p) => p.id === productId);
   return prod ? `${prod.codigo} - ${prod.descripcion}` : productId;
 }
 
@@ -325,21 +295,164 @@ function updateOverallTotal() {
 }
 
 /*****************************************************
+ * CREAR EL CONTENEDOR DE CONSTANCIA
+ *****************************************************/
+function crearConstancia() {
+  const constancia = document.createElement("div");
+  constancia.id = "constanciaIngreso";
+  constancia.style.width = "800px";
+  constancia.style.margin = "20px auto";
+  constancia.style.padding = "20px";
+  constancia.style.fontFamily = "Arial, sans-serif";
+  constancia.style.border = "1px solid #ccc";
+  constancia.style.boxShadow = "0 0 10px rgba(0,0,0,0.1)";
+
+  // Cabecera: logo, título y datos adicionales
+  const header = document.createElement("div");
+  header.style.textAlign = "center";
+
+  const logo = document.createElement("img");
+  logo.src = "./img/GLEED2.png";
+  logo.alt = "Logo";
+  logo.style.width = "200px";
+  header.appendChild(logo);
+
+  const title = document.createElement("h2");
+  title.textContent = "Constancia de Ingreso de Producto";
+  header.appendChild(title);
+
+  const info = document.createElement("p");
+  const storeName = document.getElementById("invoiceStore").value || "N/A";
+  const invoiceNum = document.getElementById("invoiceNumber").value || "";
+  const now = new Date();
+  const fechaStr = now.toLocaleDateString();
+  const horaStr = now.toLocaleTimeString();
+  info.innerHTML = `<strong>Tienda:</strong> ${storeName} <br/>
+                    <strong>Fecha:</strong> ${fechaStr} <br/>
+                    <strong>Hora:</strong> ${horaStr} <br/>
+                    <strong>Número de Factura:</strong> ${invoiceNum}`;
+  header.appendChild(info);
+  constancia.appendChild(header);
+
+  // Tabla de productos
+  const table = document.createElement("table");
+  table.style.width = "100%";
+  table.style.borderCollapse = "collapse";
+  table.style.marginTop = "20px";
+
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  const headers = ["Producto", "Cantidad", "Precio Unitario", "Total"];
+  headers.forEach((text) => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    th.style.border = "1px solid #000";
+    th.style.padding = "8px";
+    th.style.backgroundColor = "#f2f2f2";
+    trHead.appendChild(th);
+  });
+  thead.appendChild(trHead);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  invoiceItems.forEach((item) => {
+    const tr = document.createElement("tr");
+
+    const tdProducto = document.createElement("td");
+    tdProducto.textContent = getProductText(item.productId);
+    tdProducto.style.border = "1px solid #000";
+    tdProducto.style.padding = "8px";
+    tr.appendChild(tdProducto);
+
+    const tdCantidad = document.createElement("td");
+    tdCantidad.textContent = item.quantity;
+    tdCantidad.style.border = "1px solid #000";
+    tdCantidad.style.padding = "8px";
+    tr.appendChild(tdCantidad);
+
+    const tdPrecio = document.createElement("td");
+    tdPrecio.textContent = `Q ${parseFloat(item.price).toFixed(2)}`;
+    tdPrecio.style.border = "1px solid #000";
+    tdPrecio.style.padding = "8px";
+    tr.appendChild(tdPrecio);
+
+    const tdTotal = document.createElement("td");
+    tdTotal.textContent = `Q ${parseFloat(item.total).toFixed(2)}`;
+    tdTotal.style.border = "1px solid #000";
+    tdTotal.style.padding = "8px";
+    tr.appendChild(tdTotal);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  constancia.appendChild(table);
+
+  return constancia;
+}
+
+/*****************************************************
+ * GENERAR CONSTANCIA DE INGRESO (automático)
+ *****************************************************/
+function generarConstanciaIngreso() {
+  if (document.activeElement) document.activeElement.blur();
+  const constancia = crearConstancia();
+  const hiddenContainer = document.createElement("div");
+  hiddenContainer.style.position = "fixed";
+  hiddenContainer.style.top = "-10000px";
+  hiddenContainer.appendChild(constancia);
+  document.body.appendChild(hiddenContainer);
+
+  html2canvas(constancia).then((canvas) => {
+    const imgData = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = "constancia_ingreso.png";
+    link.href = imgData;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    document.body.removeChild(hiddenContainer);
+  });
+}
+
+/*****************************************************
+ * EXPORTAR COMPROBANTE (usado desde el modal)
+ *****************************************************/
+function exportInvoiceComprobante() {
+  if (document.activeElement) document.activeElement.blur();
+  const constancia = crearConstancia();
+  const hiddenContainer = document.createElement("div");
+  hiddenContainer.style.position = "fixed";
+  hiddenContainer.style.top = "-10000px";
+  hiddenContainer.appendChild(constancia);
+  document.body.appendChild(hiddenContainer);
+
+  html2canvas(constancia).then((canvas) => {
+    const imgData = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = "constancia_ingreso.png";
+    link.href = imgData;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    document.body.removeChild(hiddenContainer);
+  });
+}
+
+/*****************************************************
  * CREAR/ACTUALIZAR FACTURA
  *****************************************************/
 async function saveInvoice() {
   try {
-    const invoiceId     = document.getElementById("invoiceId").value;
+    const invoiceId = document.getElementById("invoiceId").value;
     const invoiceNumber = document.getElementById("invoiceNumber").value.trim();
-    const invoiceDate   = document.getElementById("invoiceDate").value;
-    const invoiceStore  = document.getElementById("invoiceStore").value;
+    const invoiceDate = document.getElementById("invoiceDate").value;
+    const invoiceStore = document.getElementById("invoiceStore").value;
 
     if (!invoiceNumber || !invoiceDate || !invoiceStore || invoiceItems.length === 0) {
       throw new Error("Complete todos los campos obligatorios y agregue al menos un producto.");
     }
 
     const overallTotal = invoiceItems.reduce((sum, item) => sum + item.total, 0);
-
     const invoiceData = {
       invoiceNumber,
       invoiceDate: Timestamp.fromDate(new Date(invoiceDate)),
@@ -351,10 +464,8 @@ async function saveInvoice() {
     };
 
     if (invoiceId) {
-      // Actualizar factura existente
       await updateDoc(doc(db, "facturas", invoiceId), invoiceData);
     } else {
-      // Crear factura nueva y actualizar inventario
       const newInvoiceRef = await addDoc(collection(db, "facturas"), invoiceData);
       for (const item of invoiceItems) {
         const prodRef = doc(db, "productos", item.productId);
@@ -363,13 +474,12 @@ async function saveInvoice() {
           const prodData = prodDoc.data();
           const currentStock = (prodData.stock && prodData.stock[invoiceStore]) || 0;
           const newStock = currentStock + item.quantity;
-          const updatedStock = {
-            ...prodData.stock,
-            [invoiceStore]: newStock
-          };
+          const updatedStock = { ...prodData.stock, [invoiceStore]: newStock };
           await updateDoc(prodRef, { stock: updatedStock });
         }
       }
+      // Generar automáticamente la constancia tras guardar una factura nueva
+      generarConstanciaIngreso();
     }
 
     bootstrap.Modal.getInstance(document.getElementById("invoiceModal")).hide();
@@ -387,17 +497,13 @@ async function loadInvoices() {
   try {
     const facturasRef = collection(db, "facturas");
     let q;
-
     if (loggedUserRole.toLowerCase() === "admin") {
       const storeSelected = document.getElementById("storeSelect")?.value || "";
-      if (storeSelected) {
-        q = query(facturasRef, where("invoiceStore", "==", storeSelected), orderBy("invoiceDate", "desc"));
-      } else {
-        q = query(facturasRef, orderBy("invoiceDate", "desc"));
-      }
+      q = storeSelected
+        ? query(facturasRef, where("invoiceStore", "==", storeSelected), orderBy("invoiceDate", "desc"))
+        : query(facturasRef, orderBy("invoiceDate", "desc"));
     } else {
-      const store = loggedUserStore || "";
-      q = query(facturasRef, where("invoiceStore", "==", store), orderBy("invoiceDate", "desc"));
+      q = query(facturasRef, where("invoiceStore", "==", loggedUserStore || ""), orderBy("invoiceDate", "desc"));
     }
 
     const snapshot = await getDocs(q);
@@ -405,29 +511,23 @@ async function loadInvoices() {
 
     const tbody = document.querySelector("#facturasTable tbody");
     tbody.innerHTML = "";
-
     snapshot.forEach((docSnap) => {
       const invoice = docSnap.data();
       const row = tbody.insertRow();
-
-      if (invoice.status === "anulado") {
-        row.classList.add("table-warning");
-      }
+      if (invoice.status === "anulado") row.classList.add("table-warning");
       row.insertCell(0).textContent = invoice.invoiceNumber;
-
-      const dateStr = invoice.invoiceDate && invoice.invoiceDate.toDate
-        ? invoice.invoiceDate.toDate().toLocaleDateString()
-        : "";
+      const dateStr = invoice.invoiceDate && invoice.invoiceDate.toDate ? invoice.invoiceDate.toDate().toLocaleDateString() : "";
       row.insertCell(1).textContent = dateStr;
       row.insertCell(2).textContent = invoice.invoiceStore || "-";
       row.insertCell(3).textContent = invoice.status ? invoice.status.toUpperCase() : "ACTIVO";
 
-      const productsList = (invoice.items || []).map(item => {
-        const prod = allProducts.find(p => p.id === item.productId);
-        return prod ? `${prod.codigo} - ${prod.descripcion}` : item.productId;
-      }).join(", ");
+      const productsList = (invoice.items || [])
+        .map((item) => {
+          const prod = allProducts.find((p) => p.id === item.productId);
+          return prod ? `${prod.codigo} - ${prod.descripcion}` : item.productId;
+        })
+        .join(", ");
       row.insertCell(4).textContent = productsList;
-
       row.insertCell(5).textContent = invoice.overallTotal;
 
       const cellActions = row.insertCell(6);
@@ -464,22 +564,17 @@ async function viewInvoiceDetails(invoiceId) {
       return;
     }
     const invoice = docSnap.data();
-
     document.getElementById("detailInvoiceNumber").textContent = invoice.invoiceNumber;
-    const dateStr = invoice.invoiceDate && invoice.invoiceDate.toDate
-      ? invoice.invoiceDate.toDate().toLocaleDateString()
-      : "";
+    const dateStr = invoice.invoiceDate && invoice.invoiceDate.toDate ? invoice.invoiceDate.toDate().toLocaleDateString() : "";
     document.getElementById("detailInvoiceDate").textContent = dateStr;
     document.getElementById("detailInvoiceStore").textContent = invoice.invoiceStore || "-";
-    document.getElementById("detailInvoiceStatus").textContent = invoice.status
-      ? invoice.status.toUpperCase()
-      : "ACTIVO";
+    document.getElementById("detailInvoiceStatus").textContent = invoice.status ? invoice.status.toUpperCase() : "ACTIVO";
 
     const tbody = document.getElementById("detailInvoiceItems");
     tbody.innerHTML = "";
-    (invoice.items || []).forEach(item => {
+    (invoice.items || []).forEach((item) => {
       const tr = document.createElement("tr");
-      const prod = allProducts.find(p => p.id === item.productId);
+      const prod = allProducts.find((p) => p.id === item.productId);
       const prodText = prod ? `${prod.codigo} - ${prod.descripcion}` : item.productId;
       tr.innerHTML = `
         <td>${prodText}</td>
@@ -489,30 +584,12 @@ async function viewInvoiceDetails(invoiceId) {
       `;
       tbody.appendChild(tr);
     });
-    document.getElementById("detailInvoiceOverallTotal").textContent =
-      parseFloat(invoice.overallTotal).toFixed(2);
-
+    document.getElementById("detailInvoiceOverallTotal").textContent = parseFloat(invoice.overallTotal).toFixed(2);
     new bootstrap.Modal(document.getElementById("invoiceDetailsModal")).show();
   } catch (error) {
     console.error("Error al cargar detalles de factura:", error);
     alert("Error al cargar detalles: " + error.message);
   }
-}
-
-/*****************************************************
- * EXPORTAR COMPROBANTE COMO IMAGEN
- *****************************************************/
-function exportInvoiceComprobante() {
-  const container = document.getElementById("invoiceDetailsContainer");
-  html2canvas(container).then((canvas) => {
-    const imgData = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.download = "comprobante_factura.png";
-    link.href = imgData;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
 }
 
 /*****************************************************
@@ -527,25 +604,19 @@ async function editInvoice(invoiceId) {
       return;
     }
     const invoice = docSnap.data();
-
     document.getElementById("invoiceId").value = invoiceId;
     document.getElementById("invoiceNumber").value = invoice.invoiceNumber;
     if (invoice.invoiceDate && invoice.invoiceDate.seconds) {
-      document.getElementById("invoiceDate").value = new Date(invoice.invoiceDate.seconds * 1000)
-        .toISOString()
-        .slice(0, 10);
+      document.getElementById("invoiceDate").value = new Date(invoice.invoiceDate.seconds * 1000).toISOString().slice(0, 10);
     } else {
       document.getElementById("invoiceDate").value = "";
     }
-
     await loadInvoiceStores();
     await loadAllProductsForInvoice();
-
     document.getElementById("invoiceStore").value = invoice.invoiceStore || "";
     invoiceItems = invoice.items || [];
     renderInvoiceItems();
     updateOverallTotal();
-
     new bootstrap.Modal(document.getElementById("invoiceModal")).show();
   } catch (error) {
     alert("Error al cargar factura: " + error.message);
@@ -582,7 +653,6 @@ async function anularInvoice(invoiceId) {
       alert("La factura ya se encuentra anulada o con otro estado.");
       return;
     }
-    // Revertir stock
     for (const item of invoice.items || []) {
       const prodRef = doc(db, "productos", item.productId);
       const prodDoc = await getDoc(prodRef);
@@ -593,7 +663,6 @@ async function anularInvoice(invoiceId) {
         await updateDoc(prodRef, { stock: updatedStock });
       }
     }
-    // Cambiar status
     await updateDoc(docRef, { status: "anulado" });
     alert("Factura anulada y el inventario fue revertido.");
     loadInvoices();
@@ -626,7 +695,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadInvoices();
 });
 
-// Exponer funciones globalmente para usar en onclick
+// Exponer funciones globalmente para su uso en los atributos onclick del HTML
 window.showAddInvoiceForm = showAddInvoiceForm;
 window.addInvoiceItem = addInvoiceItem;
 window.removeInvoiceItem = removeInvoiceItem;
