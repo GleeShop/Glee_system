@@ -21,6 +21,7 @@ console.log("db =>", db);
 let allProducts = [];
 let invoiceItems = [];
 let currentProductRow = null;
+let currentInvoiceData = null;  // Almacena la data de la factura visualizada
 
 // Leer datos del usuario (rol y tienda) desde localStorage
 const loggedUserRole  = localStorage.getItem("loggedUserRole")  || "";
@@ -298,6 +299,13 @@ function updateOverallTotal() {
  * CREAR EL CONTENEDOR DE CONSTANCIA
  *****************************************************/
 function crearConstancia() {
+  // Utiliza los datos de currentInvoiceData si existen; de lo contrario, toma los valores del formulario
+  const invoiceData = currentInvoiceData || {
+    invoiceStore: document.getElementById("invoiceStore").value,
+    invoiceNumber: document.getElementById("invoiceNumber").value,
+    items: invoiceItems
+  };
+
   const constancia = document.createElement("div");
   constancia.id = "constanciaIngreso";
   constancia.style.width = "800px";
@@ -322,8 +330,8 @@ function crearConstancia() {
   header.appendChild(title);
 
   const info = document.createElement("p");
-  const storeName = document.getElementById("invoiceStore").value || "N/A";
-  const invoiceNum = document.getElementById("invoiceNumber").value || "";
+  const storeName = invoiceData.invoiceStore || "N/A";
+  const invoiceNum = invoiceData.invoiceNumber || "";
   const now = new Date();
   const fechaStr = now.toLocaleDateString();
   const horaStr = now.toLocaleTimeString();
@@ -355,7 +363,7 @@ function crearConstancia() {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  invoiceItems.forEach((item) => {
+  (invoiceData.items || []).forEach((item) => {
     const tr = document.createElement("tr");
 
     const tdProducto = document.createElement("td");
@@ -391,7 +399,7 @@ function crearConstancia() {
 }
 
 /*****************************************************
- * GENERAR CONSTANCIA DE INGRESO (automático)
+ * GENERAR CONSTANCIA DE INGRESO (automático tras guardar)
  *****************************************************/
 function generarConstanciaIngreso() {
   if (document.activeElement) document.activeElement.blur();
@@ -415,7 +423,7 @@ function generarConstanciaIngreso() {
 }
 
 /*****************************************************
- * EXPORTAR COMPROBANTE (usado desde el modal)
+ * EXPORTAR COMPROBANTE DESDE EL MODAL (Detalles de Factura)
  *****************************************************/
 function exportInvoiceComprobante() {
   if (document.activeElement) document.activeElement.blur();
@@ -564,6 +572,7 @@ async function viewInvoiceDetails(invoiceId) {
       return;
     }
     const invoice = docSnap.data();
+    currentInvoiceData = invoice;  // Guardamos la data actual para usarla en la constancia
     document.getElementById("detailInvoiceNumber").textContent = invoice.invoiceNumber;
     const dateStr = invoice.invoiceDate && invoice.invoiceDate.toDate ? invoice.invoiceDate.toDate().toLocaleDateString() : "";
     document.getElementById("detailInvoiceDate").textContent = dateStr;
@@ -592,110 +601,7 @@ async function viewInvoiceDetails(invoiceId) {
   }
 }
 
-/*****************************************************
- * EDITAR FACTURA
- *****************************************************/
-async function editInvoice(invoiceId) {
-  try {
-    const docRef = doc(db, "facturas", invoiceId);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-      alert("Factura no encontrada.");
-      return;
-    }
-    const invoice = docSnap.data();
-    document.getElementById("invoiceId").value = invoiceId;
-    document.getElementById("invoiceNumber").value = invoice.invoiceNumber;
-    if (invoice.invoiceDate && invoice.invoiceDate.seconds) {
-      document.getElementById("invoiceDate").value = new Date(invoice.invoiceDate.seconds * 1000).toISOString().slice(0, 10);
-    } else {
-      document.getElementById("invoiceDate").value = "";
-    }
-    await loadInvoiceStores();
-    await loadAllProductsForInvoice();
-    document.getElementById("invoiceStore").value = invoice.invoiceStore || "";
-    invoiceItems = invoice.items || [];
-    renderInvoiceItems();
-    updateOverallTotal();
-    new bootstrap.Modal(document.getElementById("invoiceModal")).show();
-  } catch (error) {
-    alert("Error al cargar factura: " + error.message);
-  }
-}
-
-/*****************************************************
- * ELIMINAR FACTURA
- *****************************************************/
-async function deleteInvoice(invoiceId) {
-  if (!confirm("¿Está seguro de eliminar esta factura?")) return;
-  try {
-    await deleteDoc(doc(db, "facturas", invoiceId));
-    loadInvoices();
-  } catch (error) {
-    alert("Error al eliminar la factura: " + error.message);
-  }
-}
-
-/*****************************************************
- * ANULAR FACTURA
- *****************************************************/
-async function anularInvoice(invoiceId) {
-  if (!confirm("¿Está seguro de anular esta factura? Se revertirá el inventario.")) return;
-  try {
-    const docRef = doc(db, "facturas", invoiceId);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-      alert("Factura no encontrada.");
-      return;
-    }
-    const invoice = docSnap.data();
-    if (invoice.status !== "activo") {
-      alert("La factura ya se encuentra anulada o con otro estado.");
-      return;
-    }
-    for (const item of invoice.items || []) {
-      const prodRef = doc(db, "productos", item.productId);
-      const prodDoc = await getDoc(prodRef);
-      if (prodDoc.exists()) {
-        const prod = prodDoc.data();
-        let updatedStock = prod.stock || {};
-        updatedStock[invoice.invoiceStore] = (updatedStock[invoice.invoiceStore] || 0) - item.quantity;
-        await updateDoc(prodRef, { stock: updatedStock });
-      }
-    }
-    await updateDoc(docRef, { status: "anulado" });
-    alert("Factura anulada y el inventario fue revertido.");
-    loadInvoices();
-  } catch (error) {
-    alert("Error al anular factura: " + error.message);
-  }
-}
-
-/*****************************************************
- * EXPORTAR LISTADO DE FACTURAS COMO IMAGEN
- *****************************************************/
-function exportInvoicesImage() {
-  const container = document.getElementById("exportFacturasContainer");
-  html2canvas(container).then((canvas) => {
-    const imgData = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.download = "listado_facturas.png";
-    link.href = imgData;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
-}
-
-/*****************************************************
- * INICIALIZACIÓN AL CARGAR LA PÁGINA
- *****************************************************/
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadAllProductsForInvoice();
-  loadInvoices();
-});
-
-// Exponer funciones globalmente para su uso en los atributos onclick del HTML
+// Exponer funciones globalmente para su uso en el HTML
 window.showAddInvoiceForm = showAddInvoiceForm;
 window.addInvoiceItem = addInvoiceItem;
 window.removeInvoiceItem = removeInvoiceItem;
