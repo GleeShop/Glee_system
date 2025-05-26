@@ -207,7 +207,6 @@ function getDisplayedStock(product) {
   return product.stock[currentStore] || 0;
 }
 
-
 // Función para renderizar los controles de paginación con números agrupados en bloques de 5
 function renderPaginationControls(totalItems) {
   const paginationContainer = document.getElementById("paginationContainer");
@@ -220,7 +219,7 @@ function renderPaginationControls(totalItems) {
   const groupStart = Math.floor((currentPage - 1) / groupSize) * groupSize + 1;
   const groupEnd = Math.min(groupStart + groupSize - 1, totalPages);
   
-  // Botón "Anterior" (para ir a la página anterior)
+  // Botón "Anterior"
   const prevButton = document.createElement("button");
   prevButton.textContent = "Anterior";
   prevButton.className = "btn btn-outline-primary me-1";
@@ -233,7 +232,7 @@ function renderPaginationControls(totalItems) {
   });
   paginationContainer.appendChild(prevButton);
   
-  // Botones numéricos para las páginas del grupo actual
+  // Botones numéricos
   for (let i = groupStart; i <= groupEnd; i++) {
     const pageButton = document.createElement("button");
     pageButton.textContent = i;
@@ -248,7 +247,7 @@ function renderPaginationControls(totalItems) {
     paginationContainer.appendChild(pageButton);
   }
   
-  // Botón "Siguiente" (para ir a la página siguiente)
+  // Botón "Siguiente"
   const nextButton = document.createElement("button");
   nextButton.textContent = "Siguiente";
   nextButton.className = "btn btn-outline-primary";
@@ -335,10 +334,10 @@ async function crearProducto() {
   if (!formValues) return;
   try {
     const newProduct = {
-      codigo: formValues.codigo,
-      descripcion: formValues.descripcion,
-      talla: formValues.talla,
-      color: formValues.color,
+      codigo: formValues.codigo.toUpperCase(),
+      descripcion: formValues.descripcion.toUpperCase(),
+      talla: formValues.talla.toUpperCase(),
+      color: formValues.color.toUpperCase(),
       precio: formValues.precio,
       stock: {},
       createdAt: new Date().toISOString()
@@ -398,10 +397,10 @@ async function editarProducto() {
   if (!formValues) return;
   try {
     const updateData = {
-      codigo: formValues.codigo,
-      descripcion: formValues.descripcion,
-      talla: formValues.talla,
-      color: formValues.color,
+      codigo: formValues.codigo.toUpperCase(),
+      descripcion: formValues.descripcion.toUpperCase(),
+      talla: formValues.talla.toUpperCase(),
+      color: formValues.color.toUpperCase(),
       precio: formValues.precio
     };
     await updateDoc(doc(db, "productos", selectedProductId), updateData);
@@ -478,8 +477,7 @@ async function modificarStock() {
       const updatedStock = product.stock && typeof product.stock === "object"
         ? { ...product.stock }
         : {};
-      const storeKey = currentStore;
-      updatedStock[storeKey] = Number(newStock);
+      updatedStock[currentStore] = Number(newStock);
       await updateDoc(doc(db, "productos", selectedProductId), { stock: updatedStock });
       Swal.fire("Stock actualizado", "El stock fue actualizado correctamente", "success");
     } catch (error) {
@@ -533,27 +531,15 @@ async function cargarConCadenaTexto() {
 
   lines.forEach(line => {
     const parts = line.split(",").map(item => item.trim());
+    if (parts.length < 6) return;
 
-    if (parts.length < 6) {
-      console.warn("Línea inválida (menos de 6 valores):", line);
-      return;
-    }
-
-    const codigo = parts[0] || "";
-    const descripcion = parts[1] || "";
-    const talla = parts[2] || "";
-    const precio = parseFloat(parts[3].replace("Q", "").trim()); // Elimina "Q" y convierte a número
-    const color = parts[4] || "";
-    let stock = parseInt(parts[5]);
-
-    if (!codigo || !descripcion || !color || isNaN(precio) || precio <= 0) {
-      console.warn("Producto inválido (datos incorrectos):", parts);
-      return;
-    }
-
-    if (isNaN(stock) || stock < 0) {
-      stock = 0;
-    }
+    const codigo      = parts[0].toUpperCase();
+    const descripcion = parts[1].toUpperCase();
+    const talla       = parts[2].toUpperCase();
+    const precio      = parseFloat(parts[3].replace("Q", "").trim());
+    const color       = parts[4].toUpperCase();
+    let stock         = parseInt(parts[5], 10);
+    if (isNaN(stock) || stock < 0) stock = 0;
 
     productosProcesados.push({ codigo, descripcion, talla, precio, color, stock });
   });
@@ -586,23 +572,22 @@ async function cargarConCadenaTexto() {
         // Si el producto ya existe, solo se actualiza el stock en la tienda correspondiente
         const existingDoc = querySnapshot.docs[0];
         const existingData = existingDoc.data();
-        let updatedStock = existingData.stock && typeof existingData.stock === "object" ? { ...existingData.stock } : {};
+        let updatedStock = existingData.stock && typeof existingData.stock === "object"
+          ? { ...existingData.stock }
+          : {};
 
         // SUMAR stock al existente en la tienda en lugar de sobrescribirlo
         updatedStock[storeKey] = (updatedStock[storeKey] || 0) + prod.stock;
-
         batch.push(updateDoc(doc(db, "productos", existingDoc.id), { stock: updatedStock }));
       }
     }
 
     await Promise.all(batch);
     Swal.fire("Carga exitosa", `${productosProcesados.length} productos han sido cargados o actualizados correctamente.`, "success");
-
   } catch (error) {
     Swal.fire("Error", "No se pudo cargar los productos: " + error.message, "error");
   }
 }
-
 
 /*********************************************
  * INICIALIZACIÓN DE LA PÁGINA Y ASIGNACIÓN DE EVENTOS
