@@ -1,273 +1,181 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Traslados</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Traslados</title>
 
-    <!-- Bootstrap CSS -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <!-- DataTables CSS -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css"
-    />
-    <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- jQuery (requerido por DataTables) -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- DataTables JS -->
-    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-    <!-- jsPDF para generar PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Bootstrap CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <!-- DataTables CSS -->
+  <link
+    href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css"
+    rel="stylesheet"
+  />
 
-    <!-- Estilos personalizados -->
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
+  <!-- SweetAlert2 (global) -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- jQuery (necesario para DataTables) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 
-  <body>
-    <div class="container">
-      <h1 class="mb-4">Gestión de Traslados</h1>
+  <!-- Estilos personalizados -->
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="container my-4">
+    <h1 class="mb-4">Gestión de Traslados</h1>
 
-      <!-- Botón para crear nuevo traslado -->
-      <button
-        id="btnNuevoTraslado"
-        class="btn btn-primary mb-3"
-        onclick="showTransferForm()"
-      >
-        Nuevo Traslado
+    <button id="btnNuevoTraslado" class="btn btn-primary mb-3"
+            onclick="showTransferForm()">
+      Nuevo Traslado
+    </button>
+
+    <div id="adminStoreFilterOrigin" class="mb-3" style="display:none">
+      <label for="storeSelectOrigin" class="form-label">
+        Filtrar "Mis Traslados" por Origen:
+      </label>
+      <select id="storeSelectOrigin" class="form-select">
+        <option value="">Ver todos</option>
+      </select>
+    </div>
+
+    <h2 class="mt-4">Mis Traslados</h2>
+    <table id="myTransfersTable" class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th><th>Productos</th><th>Cant.</th>
+          <th>Origen</th><th>Destino</th><th>Fecha</th>
+          <th>Estado</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="adminStoreFilterDestination" class="mb-3" style="display:none">
+      <label for="storeSelectDestination" class="form-label">
+        Filtrar "Pendientes" por Destino:
+      </label>
+      <select id="storeSelectDestination" class="form-select">
+        <option value="">Ver todos</option>
+      </select>
+    </div>
+
+    <h2 class="mt-4">Validar Traslados Recepción</h2>
+    <table id="pendingTransfersTable" class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th><th>Fecha</th><th>Productos</th>
+          <th>Cant.</th><th>Pedido Por</th>
+          <th>Stock Actual</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="transferDetail" class="card p-3 mt-4" style="display:none">
+      <h4>Detalle del Pedido</h4>
+      <p><strong>ID:</strong> <span id="detailId"></span></p>
+      <p><strong>Productos:</strong> <span id="detailProduct"></span></p>
+      <p><strong>Cant.:</strong> <span id="detailQuantity"></span></p>
+      <p><strong>Pedido Por:</strong> <span id="detailPedidoPor"></span></p>
+      <p><strong>Stock Destino:</strong> <span id="detailStock"></span></p>
+      <button class="btn btn-success" onclick="validateTransfer()">
+        Pedido Recibido
       </button>
-
-      <!-- Filtro de tiendas (solo para admin) en "Mis Traslados" -->
-      <div id="adminStoreFilterOrigin" class="mb-3" style="display: none;">
-        <label for="storeSelectOrigin" class="form-label"
-          >Filtrar "Mis Traslados" por Origen:</label
-        >
-        <select id="storeSelectOrigin" class="form-select">
-          <option value="">Ver todos los traslados</option>
-        </select>
-      </div>
-
-      <!-- Sección: Mis Traslados -->
-      <h2>Mis Traslados</h2>
-      <table class="table table-striped" id="myTransfersTable">
-        <thead>
-          <tr>
-            <th>ID Traslado</th>
-            <th>Producto(s)</th>
-            <th>Cantidad(es)</th>
-            <th>Tienda Origen</th>
-            <th>Tienda Destino</th>
-            <th>Fecha</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Aquí se cargarán los traslados -->
-        </tbody>
-      </table>
-
-      <!-- Filtro de tiendas (solo para admin) en "Validar Traslados" -->
-      <div id="adminStoreFilterDestination" class="mb-3" style="display: none;">
-        <label for="storeSelectDestination" class="form-label"
-          >Filtrar "Traslados Pendientes" por Destino:</label
-        >
-        <select id="storeSelectDestination" class="form-select">
-          <option value="">Ver todos los pendientes</option>
-        </select>
-      </div>
-
-      <!-- Sección: Validar Traslados Recepción -->
-      <h2>Validar Traslados Recepción</h2>
-      <div class="mb-3">
-        <label for="destinationFilter" class="form-label"
-          >Tienda Destino (no editable)</label
-        >
-        <input type="text" id="destinationFilter" class="form-control" readonly />
-      </div>
-      <table class="table table-striped" id="pendingTransfersTable">
-        <thead>
-          <tr>
-            <th>ID Traslado</th>
-            <th>Fecha</th>
-            <th>Producto(s)</th>
-            <th>Cantidad(es)</th>
-            <th>Pedido Por</th>
-            <th>Stock Actual</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Aquí se cargarán los traslados pendientes para validar -->
-        </tbody>
-      </table>
-
-      <!-- Tarjeta de Detalle para Validación -->
-      <div id="transferDetail" class="detail-card" style="display: none;">
-        <h4>Detalle del Pedido</h4>
-        <p>
-          <strong>ID Traslado:</strong>
-          <span id="detailId"></span>
-        </p>
-        <p>
-          <strong>Producto(s):</strong>
-          <span id="detailProduct"></span>
-        </p>
-        <p>
-          <strong>Cantidad(es):</strong>
-          <span id="detailQuantity"></span>
-        </p>
-        <p>
-          <strong>Pedido Por:</strong>
-          <span id="detailPedidoPor"></span>
-        </p>
-        <p>
-          <strong>Stock Actual en Destino:</strong>
-          <span id="detailStock"></span>
-        </p>
-        <button class="btn btn-success" onclick="validateTransfer()">
-          Pedido Recibido
-        </button>
-      </div>
     </div>
+  </div>
 
-    <!-- Modal para Crear/Editar Traslado -->
-    <div
-      class="modal fade"
-      id="transferModal"
-      tabindex="-1"
-      aria-labelledby="transferModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <form id="transferForm">
-            <div class="modal-header">
-              <h5 class="modal-title" id="transferModalLabel">Nuevo Traslado</h5>
-              <button
-                type="button"
-                class="btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Cerrar"
-              ></button>
-            </div>
-            <div class="modal-body">
-              <!-- Campo oculto para el ID (en caso de edición) -->
-              <input type="hidden" id="transferId" />
-
-              <!-- Selección de productos con modal -->
-              <div class="mb-3">
-                <label class="form-label">Productos Seleccionados</label>
-                <div id="selectedProductsContainer">
-                  <!-- Aquí se mostrarán los productos agregados -->
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-secondary mt-2"
-                  onclick="openProductSearchModal()"
-                >
-                  Agregar Productos
-                </button>
-              </div>
-
-              <!-- Contenedor para Tienda Origen (admin => <select>, no admin => <input readonly>) -->
-              <div class="mb-3" id="originStoreContainer"></div>
-
-              <div class="mb-3">
-                <label for="transferDestination" class="form-label"
-                  >Tienda Destino</label
-                >
-                <select id="transferDestination" class="form-select" required>
-                  <!-- Se llenará dinámicamente (excluyendo tienda de origen) -->
-                </select>
-              </div>
-
-              <div class="mb-3">
-                <label for="transferComments" class="form-label">Comentarios</label>
-                <textarea id="transferComments" class="form-control"></textarea>
-              </div>
-            </div>
-
-            <div class="modal-footer">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                data-bs-dismiss="modal"
-              >
-                Cancelar
-              </button>
-              <button type="submit" class="btn btn-primary">
-                Guardar Traslado
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal para búsqueda de productos -->
-    <div
-      class="modal fade"
-      id="productSearchModal"
-      tabindex="-1"
-      aria-labelledby="productSearchModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
+  <!-- Modal Traslado -->
+  <div class="modal fade" id="transferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <form id="transferForm">
           <div class="modal-header">
-            <h5 class="modal-title" id="productSearchModalLabel">
-              Buscar Productos
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Cerrar"
-            ></button>
+            <h5 class="modal-title" id="transferModalLabel">Nuevo Traslado</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <input
-              type="text"
-              id="productSearchInput"
-              class="form-control mb-3"
-              placeholder="Buscar producto..."
-            />
-            <table class="table table-striped" id="productSearchTable">
-              <thead>
-                <tr>
-                  <th>Seleccionar</th>
-                  <th>Código</th>
-                  <th>Descripción</th>
-                  <th>Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Se llenará dinámicamente con los productos -->
-              </tbody>
-            </table>
+            <input type="hidden" id="transferId" />
+
+            <div class="row mb-3">
+              <div class="col-md-6" id="originStoreContainer"></div>
+              <div class="col-md-6">
+                <label class="form-label">Destino</label>
+                <select id="transferDestination" class="form-select" required>
+                  <option value="">Seleccione destino</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Comentario</label>
+              <textarea id="transferComments" class="form-control" rows="2">
+              </textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Productos a trasladar</label>
+              <table id="selectedProductsTable" class="table table-bordered">
+                <thead>
+                  <tr>
+                    <th>Código</th><th>Desc.</th><th>Color</th>
+                    <th>Talla</th><th>Precio</th><th>Cant.</th><th>Quitar</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <button type="button" class="btn btn-secondary mt-2"
+                      onclick="openProductSearchModal()">
+                Agregar producto
+              </button>
+            </div>
           </div>
           <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-primary"
-              onclick="addSelectedProducts()"
-            >
-              Agregar Seleccionados
+            <button class="btn btn-secondary" data-bs-dismiss="modal">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Guardar Traslado
             </button>
           </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Búsqueda Dinámica con DataTables -->
+  <div class="modal fade" id="productSearchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Buscar Productos</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <table id="productSearchTable" class="table table-striped table-bordered">
+            <thead>
+              <tr>
+                <th>Código</th><th>Desc.</th><th>Color</th>
+                <th>Talla</th><th>Precio</th><th>Stock</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Bootstrap JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Archivo principal de lógica (Firebase V9) -->
-    <script type="module" src="traslados.js"></script>
-  </body>
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+  </script>
+  <!-- Lógica principal -->
+  <script type="module" src="traslados.js"></script>
+</body>
 </html>

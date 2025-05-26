@@ -1,12 +1,8 @@
-/***************************************************
- * traslados.js (Firebase V9)
- * Lógica para gestionar traslados con selección múltiple de productos
- ***************************************************/
+// traslados.js
 import { db } from "./firebase-config.js";
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   updateDoc,
   addDoc,
@@ -17,724 +13,412 @@ import {
   increment
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
-// Variables globales
-let products = [];
+// — Globals —
 let allStores = [];
-let selectedProducts = []; // Almacena objetos { productId, quantity }
+let selectedProducts = []; // { productId, quantity }
+let productTable = null;
 
-// Leer info del usuario
-const loggedUser = localStorage.getItem("loggedUser") || "";
-const loggedUserRole = localStorage.getItem("loggedUserRole") || "";
+// User info
+const loggedUser      = localStorage.getItem("loggedUser")      || "";
+const loggedUserRole  = localStorage.getItem("loggedUserRole")  || "";
 const loggedUserStore = localStorage.getItem("loggedUserStore") || "";
 
-/****************************************************
- * 1) Cargar TODAS las tiendas
- ****************************************************/
-async function loadAllStores() {
-  try {
-    const q = query(collection(db, "tiendas"), orderBy("nombre"));
-    const snapshot = await getDocs(q);
-    allStores = [];
-    snapshot.forEach((docSnap) => {
-      const storeData = docSnap.data();
-      allStores.push(storeData.nombre);
-    });
-  } catch (error) {
-    console.error("Error loadAllStores:", error);
-  }
+/** 1) Load all stores */
+async function loadAllStores(){
+  const snap = await getDocs(query(collection(db,"tiendas"), orderBy("nombre")));
+  allStores = snap.docs.map(d=>d.data().nombre);
 }
 
-/****************************************************
- * 2) Poblar <select> origin y destination (admin only)
- ****************************************************/
-function populateOriginStoreSelect() {
-  const storeSelect = document.getElementById("storeSelectOrigin");
-  if (!storeSelect) return;
-  storeSelect.innerHTML = `<option value="">Ver todos los traslados</option>`;
-  allStores.forEach((storeName) => {
-    const option = document.createElement("option");
-    option.value = storeName;
-    option.textContent = storeName;
-    storeSelect.appendChild(option);
+/** 2) Populate admin filters */
+function populateAdminFilters(){
+  if(loggedUserRole.toLowerCase() !== "admin") return;
+  const oSel = document.getElementById("storeSelectOrigin");
+  const dSel = document.getElementById("storeSelectDestination");
+  allStores.forEach(n=>{
+    let o = document.createElement("option");
+    o.value = o.textContent = n;
+    oSel.append(o.cloneNode(true));
+    dSel.append(o.cloneNode(true));
+  });
+  document.getElementById("adminStoreFilterOrigin").style.display = "block";
+  document.getElementById("adminStoreFilterDestination").style.display = "block";
+  oSel.onchange = loadMyTransfers;
+  dSel.onchange = loadPendingTransfers;
+}
+
+/** 3) Get stock for product in origin store */
+function getStockForProduct(p){
+  const origin = document.getElementById("transferOrigin")?.value || loggedUserStore;
+  const field = origin==="Tienda A" ? "stockTiendaA" : origin==="Tienda B"? "stockTiendaB":null;
+  return field && p[field]!=null ? p[field] : 0;
+}
+
+/** 4) Load My Transfers */
+async function loadMyTransfers(){
+  const ref = collection(db,"traslados");
+  let q;
+  if(loggedUserRole.toLowerCase()==="admin"){
+    const of = document.getElementById("storeSelectOrigin").value;
+    q = of
+      ? query(ref, where("origin","==",of), orderBy("date","desc"))
+      : query(ref, orderBy("date","desc"));
+  } else {
+    q = query(ref, where("pedidoPor","==",loggedUser), orderBy("date","desc"));
+  }
+  const snap = await getDocs(q);
+  const tbody = document.querySelector("#myTransfersTable tbody");
+  tbody.innerHTML="";
+  snap.forEach(docSnap=>{
+    const t=docSnap.data();
+    const r=tbody.insertRow();
+    r.insertCell().textContent=docSnap.id.slice(0,6);
+    let ph="",qh="";
+    (t.products||[]).forEach(it=>{ph+=it.productId+"<br>";qh+=it.quantity+"<br>";});
+    r.insertCell().innerHTML=ph;
+    r.insertCell().innerHTML=qh;
+    r.insertCell().textContent=t.origin;
+    r.insertCell().textContent=t.destination;
+    r.insertCell().textContent=t.date?.toDate?.().toLocaleString()||"";
+    r.insertCell().textContent=(t.status||"ACTIVO").toUpperCase();
+    const a=r.insertCell();
+    if(t.status==="pendiente"){
+      a.innerHTML=`
+        <button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
+        <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>`;
+    }else a.textContent="-";
   });
 }
 
-function populateDestinationStoreSelect() {
-  const storeSelect = document.getElementById("storeSelectDestination");
-  if (!storeSelect) return;
-  storeSelect.innerHTML = `<option value="">Ver todos los pendientes</option>`;
-  allStores.forEach((storeName) => {
-    const option = document.createElement("option");
-    option.value = storeName;
-    option.textContent = storeName;
-    storeSelect.appendChild(option);
+/** 5) Load Pending Transfers */
+async function loadPendingTransfers(){
+  const ref = collection(db,"traslados");
+  let q;
+  if(loggedUserRole.toLowerCase()==="admin"){
+    const df = document.getElementById("storeSelectDestination").value;
+    q = df
+      ? query(ref, where("destination","==",df), where("status","==","pendiente"), orderBy("date","desc"))
+      : query(ref, where("status","==","pendiente"), orderBy("date","desc"));
+  } else {
+    q = query(ref,
+      where("destination","==",loggedUserStore),
+      where("status","==","pendiente"),
+      orderBy("date","desc"));
+  }
+  const snap = await getDocs(q);
+  const tbody = document.querySelector("#pendingTransfersTable tbody");
+  tbody.innerHTML="";
+  snap.forEach(docSnap=>{
+    const t=docSnap.data();
+    const r=tbody.insertRow();
+    r.insertCell().textContent=docSnap.id.slice(0,6);
+    r.insertCell().textContent=t.date?.toDate?.().toLocaleString()||"";
+    let ph="",qh="";
+    (t.products||[]).forEach(it=>{ph+=it.productId+"<br>";qh+=it.quantity+"<br>";});
+    r.insertCell().innerHTML=ph;
+    r.insertCell().innerHTML=qh;
+    r.insertCell().textContent=t.pedidoPor||"-";
+    r.insertCell().textContent="—";
+    const a=r.insertCell();
+    a.innerHTML=`<button class="btn btn-sm btn-info" onclick="showValidationDetail('${docSnap.id}')">Ver</button>`;
   });
 }
 
-/************************************************
- * 3) Cargar la lista global de productos
- ************************************************/
-async function loadProductsGlobal() {
-  try {
-    const q = query(collection(db, "productos"), orderBy("codigo"));
-    const snapshot = await getDocs(q);
-    products = [];
-    snapshot.forEach((docSnap) => {
-      const prod = docSnap.data();
-      prod.id = docSnap.id;
-      products.push(prod);
-    });
-  } catch (error) {
-    console.error("Error loading products:", error);
-  }
+/** 6) Show validation detail */
+function showValidationDetail(id){
+  const d=document.getElementById("transferDetail");
+  d.dataset.id=id;
+  d.style.display="block";
 }
 
-/************************************************
- * 4) Función para obtener stock según tienda origen
- ************************************************/
-function getStockForProduct(prod) {
-  const originStore = document.getElementById("transferOrigin")
-    ? document.getElementById("transferOrigin").value
-    : "";
-  let stockField = "";
-  if (originStore === "Tienda A") stockField = "stockTiendaA";
-  else if (originStore === "Tienda B") stockField = "stockTiendaB";
-  return prod[stockField] !== undefined ? prod[stockField] : "N/A";
-}
-
-/************************************************
- * 5) Cargar "Mis Traslados" (para múltiples productos)
- ************************************************/
-async function loadMyTransfers() {
-  try {
-    let qTraslados;
-    const trasladosRef = collection(db, "traslados");
-
-    if (loggedUserRole.toLowerCase() === "admin") {
-      const storeSelected =
-        document.getElementById("storeSelectOrigin")?.value || "";
-      if (storeSelected) {
-        qTraslados = query(
-          trasladosRef,
-          where("origin", "==", storeSelected),
-          orderBy("date", "desc")
-        );
-      } else {
-        qTraslados = query(trasladosRef, orderBy("date", "desc"));
-      }
-    } else {
-      qTraslados = query(
-        trasladosRef,
-        where("pedidoPor", "==", loggedUser),
-        orderBy("date", "desc")
-      );
-    }
-
-    const snapshot = await getDocs(qTraslados);
-    const tbody = document.querySelector("#myTransfersTable tbody");
-    tbody.innerHTML = "";
-
-    snapshot.forEach((docSnap) => {
-      const transfer = docSnap.data();
-      const row = tbody.insertRow();
-
-      row.insertCell(0).textContent = docSnap.id.substring(0, 6);
-
-      // Mostrar arreglo de productos
-      let productStr = "";
-      let quantityStr = "";
-      if (transfer.products && Array.isArray(transfer.products)) {
-        transfer.products.forEach((item) => {
-          const prod = products.find((p) => p.id === item.productId);
-          productStr += prod
-            ? `${prod.codigo} - ${prod.descripcion}<br>`
-            : item.productId + "<br>";
-          quantityStr += item.quantity + "<br>";
-        });
-      }
-      row.insertCell(1).innerHTML = productStr;
-      row.insertCell(2).innerHTML = quantityStr;
-      row.insertCell(3).textContent = transfer.origin;
-      row.insertCell(4).textContent = transfer.destination;
-
-      const dateStr =
-        transfer.date && transfer.date.toDate
-          ? transfer.date.toDate().toLocaleString()
-          : "";
-      row.insertCell(5).textContent = dateStr;
-
-      row.insertCell(6).textContent = transfer.status
-        ? transfer.status.toUpperCase()
-        : "ACTIVO";
-
-      const cellActions = row.insertCell(7);
-      if (transfer.status === "pendiente") {
-        cellActions.innerHTML = `
-          <button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
-          <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>
-        `;
-      } else {
-        cellActions.textContent = "-";
-      }
-    });
-  } catch (error) {
-    console.error("Error loading my transfers:", error);
-    Swal.fire("Error", "Error loading my transfers: " + error.message, "error");
-  }
-}
-
-/***************************************************
- * 6) Cargar traslados pendientes (para validación)
- ***************************************************/
-async function loadPendingTransfers() {
-  try {
-    let qPending;
-    const trasladosRef = collection(db, "traslados");
-
-    if (loggedUserRole.toLowerCase() === "admin") {
-      const storeSelected =
-        document.getElementById("storeSelectDestination")?.value || "";
-      if (storeSelected) {
-        qPending = query(
-          trasladosRef,
-          where("destination", "==", storeSelected),
-          where("status", "==", "pendiente"),
-          orderBy("date", "desc")
-        );
-      } else {
-        qPending = query(
-          trasladosRef,
-          where("status", "==", "pendiente"),
-          orderBy("date", "desc")
-        );
-      }
-    } else {
-      qPending = query(
-        trasladosRef,
-        where("destination", "==", loggedUserStore),
-        where("status", "==", "pendiente"),
-        orderBy("date", "desc")
-      );
-    }
-
-    const snapshot = await getDocs(qPending);
-    const tbody = document.querySelector("#pendingTransfersTable tbody");
-    tbody.innerHTML = "";
-
-    snapshot.forEach((docSnap) => {
-      const transfer = docSnap.data();
-      const row = tbody.insertRow();
-
-      row.insertCell(0).textContent = docSnap.id.substring(0, 6);
-
-      const dateStr =
-        transfer.date && transfer.date.toDate
-          ? transfer.date.toDate().toLocaleString()
-          : "";
-      row.insertCell(1).textContent = dateStr;
-
-      let productStr = "";
-      let quantityStr = "";
-      if (transfer.products && Array.isArray(transfer.products)) {
-        transfer.products.forEach((item) => {
-          const prod = products.find((p) => p.id === item.productId);
-          productStr += prod
-            ? `${prod.codigo} - ${prod.descripcion}<br>`
-            : item.productId + "<br>";
-          quantityStr += item.quantity + "<br>";
-        });
-      }
-      row.insertCell(2).innerHTML = productStr;
-      row.insertCell(3).innerHTML = quantityStr;
-      row.insertCell(4).textContent = transfer.pedidoPor || "-";
-
-      let destStockField = "";
-      if (transfer.destination === "Tienda A") destStockField = "stockTiendaA";
-      else if (transfer.destination === "Tienda B") destStockField = "stockTiendaB";
-      let currentStock = "N/A";
-      if (
-        transfer.products &&
-        transfer.products.length > 0 &&
-        products.find((p) => p.id === transfer.products[0].productId)
-      ) {
-        const prod = products.find((p) => p.id === transfer.products[0].productId);
-        currentStock =
-          prod && prod[destStockField] !== undefined
-            ? prod[destStockField]
-            : "N/A";
-      }
-      row.insertCell(5).textContent = currentStock;
-
-      const cellActions = row.insertCell(6);
-      cellActions.innerHTML = `
-        <button class="btn btn-sm btn-info" onclick="showValidationDetail('${docSnap.id}')">Ver Detalles</button>
-      `;
-    });
-  } catch (error) {
-    console.error("Error loading pending transfers:", error);
-    Swal.fire("Error", "Error loading pending transfers: " + error.message, "error");
-  }
-}
-
-/********************************************************
- * 7) Mostrar detalle para validar un traslado pendiente
- ********************************************************/
-async function showValidationDetail(transferId) {
-  try {
-    const transferRef = doc(db, "traslados", transferId);
-    const transferSnap = await getDoc(transferRef);
-
-    if (!transferSnap.exists()) {
-      Swal.fire("Error", "Traslado no encontrado", "error");
-      return;
-    }
-    const transfer = transferSnap.data();
-
-    let productsStr = "";
-    let quantitiesStr = "";
-    if (transfer.products && Array.isArray(transfer.products)) {
-      transfer.products.forEach((item) => {
-        const prod = products.find((p) => p.id === item.productId);
-        productsStr += prod
-          ? `${prod.codigo} - ${prod.descripcion}<br>`
-          : item.productId + "<br>";
-        quantitiesStr += item.quantity + "<br>";
-      });
-    }
-
-    document.getElementById("detailId").textContent = transferId.substring(0, 6);
-    document.getElementById("detailProduct").innerHTML = productsStr;
-    document.getElementById("detailQuantity").innerHTML = quantitiesStr;
-    document.getElementById("detailPedidoPor").textContent =
-      transfer.pedidoPor || "-";
-
-    let destStockField = "";
-    if (transfer.destination === "Tienda A") destStockField = "stockTiendaA";
-    else if (transfer.destination === "Tienda B") destStockField = "stockTiendaB";
-    let currentStock = "N/A";
-    if (
-      transfer.products &&
-      transfer.products.length > 0 &&
-      products.find((p) => p.id === transfer.products[0].productId)
-    ) {
-      const prod = products.find((p) => p.id === transfer.products[0].productId);
-      currentStock =
-        prod && prod[destStockField] !== undefined ? prod[destStockField] : "N/A";
-    }
-    document.getElementById("detailStock").textContent = currentStock;
-
-    document.getElementById("transferDetail").setAttribute("data-id", transferId);
-    document.getElementById("transferDetail").style.display = "block";
-  } catch (error) {
-    console.error("Error showing validation detail:", error);
-    Swal.fire("Error", "Error mostrando detalle: " + error.message, "error");
-  }
-}
-
-/***********************************************************
- * 8) Validar (confirmar recepción) de un traslado pendiente
- ***********************************************************/
-async function validateTransfer() {
-  const detailDiv = document.getElementById("transferDetail");
-  const transferId = detailDiv.getAttribute("data-id");
-  if (!transferId) return;
-
-  const confirmResult = await Swal.fire({
-    title: "Confirmar Recepción",
-    text: "¿Confirmas que has recibido físicamente los productos?",
-    icon: "question",
-    showCancelButton: true,
-    confirmButtonText: "Pedido Recibido",
-    cancelButtonText: "Cancelar"
+/** 7) Validate transfer */
+async function validateTransfer(){
+  const d=document.getElementById("transferDetail");
+  const tid=d.dataset.id;
+  if(!tid) return;
+  const res=await Swal.fire({
+    title:"Confirmar recepción?",
+    icon:"question",
+    showCancelButton:true,
+    confirmButtonText:"Sí"
   });
-  if (!confirmResult.isConfirmed) return;
+  if(!res.isConfirmed) return;
 
-  try {
-    const transferRef = doc(db, "traslados", transferId);
-    const transferSnap = await getDoc(transferRef);
-    if (!transferSnap.exists()) {
-      Swal.fire("Error", "Traslado no encontrado", "error");
-      return;
-    }
-    const transfer = transferSnap.data();
-
-    const prodRef = doc(db, "productos", transfer.products[0].productId);
-    await updateDoc(prodRef, {
-      [transfer.destination === "Tienda A" ? "stockTiendaA" : "stockTiendaB"]:
-        increment(transfer.products[0].quantity)
-    });
-
-    await updateDoc(transferRef, {
-      status: "validado",
-      dateValidation: serverTimestamp()
-    });
-
-    Swal.fire("Éxito", "Traslado validado y stock actualizado", "success");
-    detailDiv.style.display = "none";
-
-    loadMyTransfers();
-    loadPendingTransfers();
-  } catch (error) {
-    console.error("Error validating transfer:", error);
-    Swal.fire("Error", "Error validando traslado: " + error.message, "error");
-  }
+  const refT=doc(db,"traslados",tid);
+  const snap=await getDocs(query(collection(db,"traslados"), where("__name__","==",tid)));
+  const t=snap.docs[0].data();
+  const prodRef=doc(db,"productos",t.products[0].productId);
+  const f=t.destination==="Tienda A"?"stockTiendaA":"stockTiendaB";
+  await updateDoc(prodRef,{ [f]:increment(t.products[0].quantity) });
+  await updateDoc(refT,{ status:"validado", dateValidation: serverTimestamp() });
+  Swal.fire("Éxito","Validado","success");
+  d.style.display="none";
+  loadMyTransfers();
+  loadPendingTransfers();
 }
 
-/***********************************************
- * 9) Mostrar formulario para crear un traslado
- ***********************************************/
-async function showTransferForm() {
+/** 8) Show Transfer Form */
+async function showTransferForm(){
   document.getElementById("transferForm").reset();
-  document.getElementById("transferId").value = "";
-  document.getElementById("transferModalLabel").textContent = "Nuevo Traslado";
-  selectedProducts = [];
+  document.getElementById("transferId").value="";
+  selectedProducts=[];
   updateSelectedProductsDisplay();
-
-  await loadProductsGlobal();
+  await loadAllStores();
   await setOriginStore();
-
   new bootstrap.Modal(document.getElementById("transferModal")).show();
 }
 
-/***************************************************************
- * 10) Editar un traslado (cargar datos en el formulario)
- ***************************************************************/
-async function editTransfer(transferId) {
-  try {
-    const transferRef = doc(db, "traslados", transferId);
-    const transferSnap = await getDoc(transferRef);
-
-    if (!transferSnap.exists()) {
-      Swal.fire("Error", "Traslado no encontrado", "error");
-      return;
-    }
-    const transfer = transferSnap.data();
-    if (transfer.status !== "pendiente") {
-      Swal.fire("Error", "Solo traslados pendientes se pueden editar", "error");
-      return;
-    }
-
-    await loadProductsGlobal();
-
-    document.getElementById("transferId").value = transferId;
-    selectedProducts = transfer.products || [];
-    updateSelectedProductsDisplay();
-
-    await setOriginStore();
-    populateDestinationSelect(transfer.origin);
-    document.getElementById("transferDestination").value = transfer.destination;
-    document.getElementById("transferComments").value = transfer.comments || "";
-    document.getElementById("transferModalLabel").textContent = "Editar Traslado";
-
-    const originElem = document.getElementById("transferOrigin");
-    if (originElem && originElem.tagName === "SELECT") {
-      originElem.value = transfer.origin;
-    } else if (originElem && originElem.tagName === "INPUT") {
-      originElem.value = transfer.origin;
-    }
-
-    new bootstrap.Modal(document.getElementById("transferModal")).show();
-  } catch (error) {
-    console.error("Error editing transfer:", error);
-    Swal.fire("Error", "Error al editar traslado: " + error.message, "error");
+/** 9) Edit Transfer */
+async function editTransfer(id){
+  const snap=await getDocs(query(collection(db,"traslados"), where("__name__","==",id)));
+  const t=snap.docs[0].data();
+  if(t.status!=="pendiente"){
+    return Swal.fire("Error","Solo pendientes","error");
   }
+  selectedProducts=t.products||[];
+  updateSelectedProductsDisplay();
+  document.getElementById("transferId").value=id;
+  document.getElementById("transferComments").value=t.comments||"";
+  document.getElementById("transferModalLabel").textContent="Editar Traslado";
+  await setOriginStore();
+  populateDestinationSelect(t.origin);
+  document.getElementById("transferDestination").value=t.destination;
+  new bootstrap.Modal(document.getElementById("transferModal")).show();
 }
 
-/*********************************************************
- * 11) Manejo del submit del formulario (crear/editar)
- *********************************************************/
-document.getElementById("transferForm").addEventListener("submit", async (e) => {
+/** 10) Save Transfer */
+document.getElementById("transferForm").addEventListener("submit", async e=>{
   e.preventDefault();
-
-  const origin = document.getElementById("transferOrigin")?.value || "";
-  const destination = document.getElementById("transferDestination").value;
-  const comments = document.getElementById("transferComments").value;
-
-  if (selectedProducts.length === 0 || !origin || !destination) {
-    Swal.fire("Error", "Complete todos los campos y agregue al menos un producto.", "error");
-    return;
+  const origin=document.getElementById("transferOrigin")?.value||"";
+  const dest=document.getElementById("transferDestination").value;
+  const comm=document.getElementById("transferComments").value;
+  if(!origin||!dest||!selectedProducts.length){
+    return Swal.fire("Error","Complete todos los campos","error");
   }
-  if (origin === destination) {
-    Swal.fire("Error", "La tienda de origen y destino deben ser distintas", "error");
-    return;
+  if(origin===dest){
+    return Swal.fire("Error","Origen≠Destino","error");
   }
-
-  const confirmResult = await Swal.fire({
-    title: "Confirm Transfer",
-    text: "¿Desea guardar este traslado?",
-    icon: "question",
-    showCancelButton: true,
-    confirmButtonText: "Sí, guardar",
-    cancelButtonText: "Cancelar"
+  const r=await Swal.fire({
+    title:"Guardar traslado?",
+    icon:"question",
+    showCancelButton:true,
+    confirmButtonText:"Sí"
   });
-  if (!confirmResult.isConfirmed) return;
+  if(!r.isConfirmed) return;
 
-  try {
-    for (let item of selectedProducts) {
-      const prod = products.find((p) => p.id === item.productId);
-      let originStockField;
-      if (origin === "Tienda A") originStockField = "stockTiendaA";
-      else if (origin === "Tienda B") originStockField = "stockTiendaB";
-
-      if (!prod || prod[originStockField] < item.quantity) {
-        Swal.fire("Error", `Stock insuficiente para ${prod ? prod.codigo : item.productId}`, "error");
-        return;
-      }
+  // descontar stock
+  for(const it of selectedProducts){
+    const pSnap=await getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)));
+    const p=pSnap.docs[0].data();
+    const f=origin==="Tienda A"?"stockTiendaA":"stockTiendaB";
+    if(p[f]<it.quantity){
+      return Swal.fire("Error",`Insuficiente ${p.codigo}`,"error");
     }
-
-    for (let item of selectedProducts) {
-      const prod = products.find((p) => p.id === item.productId);
-      let originStockField;
-      if (origin === "Tienda A") originStockField = "stockTiendaA";
-      else if (origin === "Tienda B") originStockField = "stockTiendaB";
-
-      const productRef = doc(db, "productos", item.productId);
-      await updateDoc(productRef, {
-        [originStockField]: prod[originStockField] - item.quantity
-      });
-    }
-
-    const pedidoPor = loggedUser || "unknown";
-    if (!document.getElementById("transferId").value) {
-      await addDoc(collection(db, "traslados"), {
-        products: selectedProducts,
-        origin,
-        destination,
-        comments,
-        pedidoPor,
-        date: serverTimestamp(),
-        status: "pendiente"
-      });
-      Swal.fire("Éxito", "Traslado creado exitosamente", "success");
-    } else {
-      const transferId = document.getElementById("transferId").value;
-      const transferRef = doc(db, "traslados", transferId);
-      await updateDoc(transferRef, {
-        products: selectedProducts,
-        origin,
-        destination,
-        comments,
-        date: serverTimestamp()
-      });
-      Swal.fire("Éxito", "Traslado actualizado exitosamente", "success");
-    }
-
-    bootstrap.Modal.getInstance(document.getElementById("transferModal")).hide();
-    selectedProducts = [];
-    updateSelectedProductsDisplay();
-    loadMyTransfers();
-    loadPendingTransfers();
-  } catch (error) {
-    console.error("Error saving transfer:", error);
-    Swal.fire("Error", "Error guardando traslado: " + error.message, "error");
   }
-});
+  for(const it of selectedProducts){
+    const pRef=doc(db,"productos",it.productId);
+    const pSnap=await getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)));
+    const p=pSnap.docs[0].data();
+    const f=origin==="Tienda A"?"stockTiendaA":"stockTiendaB";
+    await updateDoc(pRef,{ [f]:p[f]-it.quantity });
+  }
 
-/***********************************************
- * 12) setOriginStore (admin => select, no admin => readOnly)
- ***********************************************/
-async function setOriginStore() {
-  try {
-    let userData;
-    const qUser = query(
-      collection(db, "usuarios"),
-      where("username", "==", loggedUser)
-    );
-    const snapshot = await getDocs(qUser);
-    snapshot.forEach((docSnap) => {
-      userData = docSnap.data();
+  const pedidoPor=loggedUser||"unknown";
+  const tid=document.getElementById("transferId").value;
+  if(!tid){
+    await addDoc(collection(db,"traslados"),{
+      products:selectedProducts, origin, destination:dest,
+      comments:comm, pedidoPor, date: serverTimestamp(),
+      status:"pendiente"
     });
-
-    if (!userData) return;
-
-    if (loggedUserRole.toLowerCase() === "admin") {
-      let selectHtml = `
-        <label for="transferOrigin" class="form-label">Tienda Origen</label>
-        <select id="transferOrigin" class="form-select" required>
-          <option value="">Seleccione tienda origen</option>
-      `;
-      allStores.forEach((storeName) => {
-        selectHtml += `<option value="${storeName}">${storeName}</option>`;
-      });
-      selectHtml += "</select>";
-      document.getElementById("originStoreContainer").innerHTML = selectHtml;
-
-      const originSelect = document.getElementById("transferOrigin");
-      originSelect.addEventListener("change", () => {
-        populateDestinationSelect(originSelect.value);
-      });
-      populateDestinationSelect("");
-    } else {
-      const originHtml = `
-        <label for="transferOrigin" class="form-label">Tienda Origen</label>
-        <input type="text" id="transferOrigin" class="form-control" value="${userData.tienda}" readonly />
-      `;
-      document.getElementById("originStoreContainer").innerHTML = originHtml;
-      populateDestinationSelect(userData.tienda);
-    }
-  } catch (error) {
-    console.error("Error setting origin store:", error);
+    Swal.fire("Éxito","Creado","success");
+  } else {
+    const tRef=doc(db,"traslados",tid);
+    await updateDoc(tRef,{
+      products:selectedProducts, origin, destination:dest,
+      comments:comm, date: serverTimestamp()
+    });
+    Swal.fire("Éxito","Actualizado","success");
   }
-}
-
-/***************************************************
- * 13) Llenar <select> #transferDestination excluyendo Origen
- ***************************************************/
-function populateDestinationSelect(originStoreValue) {
-  const destSelect = document.getElementById("transferDestination");
-  if (!destSelect) return;
-  destSelect.innerHTML = `<option value="">Seleccione tienda destino</option>`;
-
-  allStores.forEach((storeName) => {
-    if (storeName !== originStoreValue) {
-      const option = document.createElement("option");
-      option.value = storeName;
-      option.textContent = storeName;
-      destSelect.appendChild(option);
-    }
-  });
-}
-
-/************************************************
- * 14) Funciones para el Modal de Búsqueda de Productos
- ************************************************/
-function openProductSearchModal() {
-  document.getElementById("productSearchInput").value = "";
-  populateProductSearchTable(products);
-  new bootstrap.Modal(document.getElementById("productSearchModal")).show();
-}
-
-function populateProductSearchTable(productList) {
-  const tbody = document.querySelector("#productSearchTable tbody");
-  tbody.innerHTML = "";
-  productList.forEach((prod) => {
-    const tr = document.createElement("tr");
-
-    const tdCheckbox = document.createElement("td");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = prod.id;
-    tdCheckbox.appendChild(checkbox);
-    tr.appendChild(tdCheckbox);
-
-    const tdCode = document.createElement("td");
-    tdCode.textContent = prod.codigo;
-    tr.appendChild(tdCode);
-
-    const tdDesc = document.createElement("td");
-    tdDesc.textContent = prod.descripcion;
-    tr.appendChild(tdDesc);
-
-    const tdStock = document.createElement("td");
-    tdStock.textContent = getStockForProduct(prod);
-    tr.appendChild(tdStock);
-
-    tbody.appendChild(tr);
-  });
-}
-
-document.getElementById("productSearchInput").addEventListener("input", function () {
-  const filter = this.value.toLowerCase();
-  const filteredProducts = products.filter((prod) =>
-    prod.codigo.toLowerCase().includes(filter) ||
-    prod.descripcion.toLowerCase().includes(filter)
-  );
-  populateProductSearchTable(filteredProducts);
-});
-
-function addSelectedProducts() {
-  const checkboxes = document.querySelectorAll(
-    "#productSearchTable tbody input[type='checkbox']"
-  );
-  checkboxes.forEach((cb) => {
-    if (cb.checked) {
-      if (!selectedProducts.some((item) => item.productId === cb.value)) {
-        selectedProducts.push({ productId: cb.value, quantity: 1 });
-      }
-    }
-  });
+  bootstrap.Modal.getInstance(document.getElementById("transferModal")).hide();
+  selectedProducts=[];
   updateSelectedProductsDisplay();
-  bootstrap.Modal.getInstance(document.getElementById("productSearchModal")).hide();
-}
-
-function updateSelectedProductsDisplay() {
-  const container = document.getElementById("selectedProductsContainer");
-  container.innerHTML = "";
-  selectedProducts.forEach((item, index) => {
-    const prod = products.find((p) => p.id === item.productId);
-    const div = document.createElement("div");
-    div.className = "mb-2";
-    div.innerHTML = `
-      <strong>${prod ? prod.codigo + " - " + prod.descripcion : item.productId}</strong>
-      <input type="number" min="1" value="${item.quantity}" onchange="updateProductQuantity(${index}, this.value)" class="form-control d-inline-block" style="width: 100px; margin-left: 10px;">
-      <button type="button" class="btn btn-danger btn-sm" onclick="removeSelectedProduct(${index})">Eliminar</button>
-    `;
-    container.appendChild(div);
-  });
-}
-
-function updateProductQuantity(index, value) {
-  selectedProducts[index].quantity = parseFloat(value);
-}
-
-function removeSelectedProduct(index) {
-  selectedProducts.splice(index, 1);
-  updateSelectedProductsDisplay();
-}
-
-/************************************************
- * 15) INICIALIZACIÓN AL CARGAR LA PÁGINA
- ************************************************/
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadAllStores();
-  await loadProductsGlobal();
-
   loadMyTransfers();
   loadPendingTransfers();
-
-  if (loggedUserRole.toLowerCase() === "admin") {
-    const adminOriginDiv = document.getElementById("adminStoreFilterOrigin");
-    const adminDestDiv = document.getElementById("adminStoreFilterDestination");
-    if (adminOriginDiv) adminOriginDiv.style.display = "block";
-    if (adminDestDiv) adminDestDiv.style.display = "block";
-
-    populateOriginStoreSelect();
-    populateDestinationStoreSelect();
-
-    const storeSelectOrigin = document.getElementById("storeSelectOrigin");
-    if (storeSelectOrigin) {
-      storeSelectOrigin.addEventListener("change", () => {
-        loadMyTransfers();
-      });
-    }
-    const storeSelectDestination = document.getElementById("storeSelectDestination");
-    if (storeSelectDestination) {
-      storeSelectDestination.addEventListener("change", () => {
-        loadPendingTransfers();
-      });
-    }
-  }
 });
 
-// DEFINIR funciones vacías para deleteTransfer y annulTransfer
-function deleteTransfer(id) {
-  console.log("deleteTransfer llamado para:", id);
+/** 11) Set Origin Store */
+async function setOriginStore(){
+  const snapU=await getDocs(query(collection(db,"usuarios"), where("username","==",loggedUser)));
+  const u=snapU.docs[0].data();
+  if(loggedUserRole.toLowerCase()==="admin"){
+    let html=`
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Tienda Origen</label>
+        <select id="transferOrigin" class="form-select" required>
+          <option value="">Seleccione origen</option>`;
+    allStores.forEach(n=> html+=`<option value="${n}">${n}</option>`);
+    html+=`</select></div>`;
+    document.getElementById("originStoreContainer").innerHTML=html;
+    document.getElementById("transferOrigin")
+      .addEventListener("change",()=>populateDestinationSelect(document.getElementById("transferOrigin").value));
+    populateDestinationSelect("");
+  } else {
+    document.getElementById("originStoreContainer").innerHTML=`
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Tienda Origen</label>
+        <input id="transferOrigin" class="form-control" value="${u.tienda}" readonly/>
+      </div>`;
+    populateDestinationSelect(u.tienda);
+  }
 }
 
-function annulTransfer(id) {
-  console.log("annulTransfer llamado para:", id);
+/** 12) Populate Destination */
+function populateDestinationSelect(origin){
+  const sel=document.getElementById("transferDestination");
+  sel.innerHTML=`<option value="">Seleccione destino</option>`;
+  allStores.forEach(n=>{
+    if(n!==origin){
+      const o=document.createElement("option");
+      o.value=o.textContent=n;
+      sel.append(o);
+    }
+  });
 }
 
-// Exponer funciones al objeto window
-window.showTransferForm = showTransferForm;
-window.editTransfer = editTransfer;
-window.deleteTransfer = deleteTransfer;
-window.annulTransfer = annulTransfer;
-window.validateTransfer = validateTransfer;
-window.showValidationDetail = showValidationDetail;
+/** 13) Open Search Modal + initialize DataTable */
+async function openProductSearchModal(){
+  const modalEl=document.getElementById("productSearchModal");
+  new bootstrap.Modal(modalEl).show();
+
+  // Fetch all products once
+  const snap=await getDocs(query(collection(db,"productos"), orderBy("descripcion")));
+  const data=snap.docs.map(d=>{
+    const p=d.data();
+    return {
+      id: d.id,
+      codigo: p.codigo,
+      descripcion: p.descripcion,
+      color: p.color||"",
+      talla: p.talla||"",
+      precio: p.precio!=null? p.precio.toFixed(2):"",
+      stock: getStockForProduct(p)
+    };
+  });
+
+  // Destroy existing table if present
+  if(productTable) {
+    productTable.clear().destroy();
+    $("#productSearchTable tbody").off();
+  }
+
+  productTable = $("#productSearchTable").DataTable({
+    data,
+    columns:[
+      { data:"codigo" },
+      { data:"descripcion" },
+      { data:"color" },
+      { data:"talla" },
+      { data:"precio" },
+      { data:"stock" },
+      {
+        data:null,
+        defaultContent:`<button class="btn btn-sm btn-primary">Agregar</button>`,
+        orderable:false
+      }
+    ],
+    pageLength: 5,
+    lengthChange: false,
+    language:{
+      search: "Buscar:",
+      paginate: {
+        first:      "Primero",
+        previous:   "Anterior",
+        next:       "Siguiente",
+        last:       "Último"
+      },
+      info: "Mostrando _START_ a _END_ de _TOTAL_ productos",
+      infoEmpty: "Mostrando 0 productos",
+      zeroRecords: "No hay productos"
+    }
+  });
+
+  // Handle Agregar clicks
+  $("#productSearchTable tbody").on("click", "button", function(){
+    const rowData = productTable.row($(this).parents('tr')).data();
+    if(selectedProducts.some(x=>x.productId===rowData.id)){
+      return Swal.fire("Aviso","Producto ya agregado","info");
+    }
+    selectedProducts.push({ productId: rowData.id, quantity:1 });
+    updateSelectedProductsDisplay();
+    bootstrap.Modal.getInstance(modalEl).hide();
+  });
+}
+
+/** 14) Update selected products table */
+function updateSelectedProductsDisplay(){
+  const tbody=document.querySelector("#selectedProductsTable tbody");
+  tbody.innerHTML="";
+  selectedProducts.forEach((it,i)=>{
+    getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)))
+      .then(snap=>{
+        const p=snap.docs[0].data();
+        const stock=getStockForProduct(p);
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td>${p.codigo}</td>
+          <td>${p.descripcion}</td>
+          <td>${p.color||""}</td>
+          <td>${p.talla||""}</td>
+          <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
+          <td>
+            <input type="number" min="1" max="${stock}" value="${it.quantity}"
+              onchange="updateProductQuantity(${i}, this.value)"
+              class="form-control form-control-sm" style="width:80px;"/>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-danger"
+              onclick="removeSelectedProduct(${i})">
+              Eliminar
+            </button>
+          </td>`;
+        tbody.append(tr);
+      });
+  });
+}
+
+/** 15) Update quantity */
+function updateProductQuantity(idx,val){
+  let q=parseInt(val,10)||1;
+  if(q<1) q=1;
+  selectedProducts[idx].quantity=q;
+}
+
+/** 16) Remove product */
+function removeSelectedProduct(idx){
+  selectedProducts.splice(idx,1);
+  updateSelectedProductsDisplay();
+}
+
+/** 17) Dummy delete/anul */
+function deleteTransfer(id){ console.log("delete",id); }
+function annulTransfer(id){ console.log("annul",id); }
+
+/** 18) Init on load */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await loadAllStores();
+  populateAdminFilters();
+  loadMyTransfers();
+  loadPendingTransfers();
+});
+
+// Expose globals
+window.showTransferForm       = showTransferForm;
+window.editTransfer           = editTransfer;
+window.validateTransfer       = validateTransfer;
+window.showValidationDetail   = showValidationDetail;
 window.openProductSearchModal = openProductSearchModal;
-window.addSelectedProducts = addSelectedProducts;
-window.updateSelectedProductsDisplay = updateSelectedProductsDisplay;
-window.updateProductQuantity = updateProductQuantity;
-window.removeSelectedProduct = removeSelectedProduct;
+window.updateProductQuantity  = updateProductQuantity;
+window.removeSelectedProduct  = removeSelectedProduct;
+window.deleteTransfer         = deleteTransfer;
+window.annulTransfer          = annulTransfer;
