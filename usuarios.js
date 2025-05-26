@@ -28,7 +28,12 @@ let userPermissions = {
 
 /************ FUNCIONES AUXILIARES ************/
 function showUserForm() {
-  document.getElementById("userForm").reset();
+  const form = document.getElementById("userForm");
+  form.reset();
+
+  // Asegurarnos de que el checkbox de ingreso de productos esté en false al crear
+  document.getElementById("permIngresoProductosUser").checked = false;
+
   document.getElementById("userId").value = "";
   document.getElementById("userModalLabel").textContent = "Crear Usuario";
   document.getElementById("userStore").disabled = false;
@@ -86,7 +91,6 @@ async function ensureAdminRole() {
           salidas: true,
           usuarios: true,
           tiendas: true,
-          // Por defecto, admin también tiene acceso a ventas
           ventasGenerales: true,
           historialVentas: true,
           preventas: true
@@ -135,10 +139,10 @@ function loadRolesTable() {
       if (role.permissions.listaProductos) {
         perms.push("listaProductos");
       }
-      // Agregar todos los permisos disponibles
       for (const key in role.permissions) {
-        if (key !== "listaProductos" && role.permissions[key])
+        if (key !== "listaProductos" && role.permissions[key]) {
           perms.push(key);
+        }
       }
     }
     row.insertCell(1).textContent = perms.join(", ");
@@ -171,14 +175,12 @@ document.getElementById("roleForm").addEventListener("submit", async (e) => {
     Swal.fire("Error", "Ingrese un nombre de rol.", "error");
     return;
   }
-  // Recopilar permisos del formulario (para CRUD y otros)
   const rolePerms = {
     entradas: document.getElementById("permEntradasRole").checked,
     movimientos: document.getElementById("permMovimientosRole").checked,
     salidas: document.getElementById("permSalidasRole").checked,
     usuarios: document.getElementById("permUsuariosRole").checked,
     tiendas: document.getElementById("permTiendasRole").checked,
-    // Se asignan por defecto estos permisos de ventas
     ventasGenerales: true,
     historialVentas: true,
     preventas: true
@@ -215,7 +217,6 @@ window.editRole = async function (roleId) {
     document.getElementById("permSalidasRole").checked = !!roleData.permissions?.salidas;
     document.getElementById("permUsuariosRole").checked = !!roleData.permissions?.usuarios;
     document.getElementById("permTiendasRole").checked = !!roleData.permissions?.tiendas;
-    // Los permisos de ventas se asignan por defecto, por lo que no se muestran en el formulario
     document.getElementById("roleEditModalLabel").textContent = "Editar Rol";
     new bootstrap.Modal(document.getElementById("roleEditModal")).show();
   } catch (error) {
@@ -259,7 +260,7 @@ async function loadUsers() {
       users.push(user);
       const row = tbody.insertRow();
       row.insertCell(0).textContent = user.username;
-      
+
       // Contraseña enmascarada
       const cellPassword = row.insertCell(1);
       const spanPassword = document.createElement("span");
@@ -280,13 +281,13 @@ async function loadUsers() {
         }
       });
       cellPassword.appendChild(btnToggle);
-      
+
       // Tienda y rol
       row.insertCell(2).textContent =
         user.rol && user.rol.toLowerCase() === "admin" ? "-" : (user.tienda || "");
       row.insertCell(3).textContent = user.rol || "";
       row.insertCell(4).textContent = user.enabled ? "Sí" : "No";
-      
+
       // Acciones
       const cellActions = row.insertCell(5);
       let actionsHTML = "";
@@ -322,6 +323,7 @@ window.editUser = async function (userId) {
     document.getElementById("username").value = user.username;
     document.getElementById("password").value = "";
     document.getElementById("userEnabled").value = user.enabled ? "true" : "false";
+
     if ((user.rol && user.rol.toLowerCase() === "admin") || user.username.toLowerCase() === "admin") {
       document.getElementById("userStore").value = "";
       document.getElementById("userStore").disabled = true;
@@ -333,30 +335,25 @@ window.editUser = async function (userId) {
       document.getElementById("userStore").value = user.tienda || "";
       document.getElementById("userRole").value = user.rol || "";
     }
-    if (user.permissions && user.permissions.listaProductos) {
-      document.getElementById("permListaProductos").checked = !!user.permissions.listaProductos.habilitado;
-      document.getElementById("permLPCrear").checked = !!user.permissions.listaProductos.botones.crear;
-      document.getElementById("permLPEditar").checked = !!user.permissions.listaProductos.botones.editar;
-      document.getElementById("permLPEliminar").checked = !!user.permissions.listaProductos.botones.eliminar;
-      document.getElementById("permLPStock").checked = !!user.permissions.listaProductos.botones.stock;
-      document.getElementById("permLPCargarTexto").checked = !!user.permissions.listaProductos.botones.cargarTexto;
-    } else {
-      document.getElementById("permListaProductos").checked = false;
-      document.getElementById("permLPCrear").checked = false;
-      document.getElementById("permLPEditar").checked = false;
-      document.getElementById("permLPEliminar").checked = false;
-      document.getElementById("permLPStock").checked = false;
-      document.getElementById("permLPCargarTexto").checked = false;
-    }
-    // Utilizar el checkbox con id "permEmpleadosUser" (único) para el permiso "empleados"
-    if(document.getElementById("permEmpleadosUser")){
-      document.getElementById("permEmpleadosUser").checked = !!user.permissions?.empleados;
-    }
-    document.getElementById("permEntradasUser").checked = !!user.permissions?.entradas;
-    document.getElementById("permMovimientosUser").checked = !!user.permissions?.movimientos;
-    document.getElementById("permSalidasUser").checked = !!user.permissions?.salidas;
-    document.getElementById("permUsuariosUser").checked = !!user.permissions?.usuarios;
-    document.getElementById("permTiendasUser").checked = !!user.permissions?.tiendas;
+
+    // Cargar permisos existentes
+    document.getElementById("permListaProductos").checked   = !!user.permissions?.listaProductos?.habilitado;
+    document.getElementById("permLPCrear").checked          = !!user.permissions?.listaProductos?.botones.crear;
+    document.getElementById("permLPEditar").checked         = !!user.permissions?.listaProductos?.botones.editar;
+    document.getElementById("permLPEliminar").checked       = !!user.permissions?.listaProductos?.botones.eliminar;
+    document.getElementById("permLPStock").checked          = !!user.permissions?.listaProductos?.botones.stock;
+    document.getElementById("permLPCargarTexto").checked    = !!user.permissions?.listaProductos?.botones.cargarTexto;
+
+    // NUEVO: permIngresoProductosUser
+    document.getElementById("permIngresoProductosUser").checked = !!user.permissions?.ingresoProductos;
+
+    document.getElementById("permEntradasUser").checked       = !!user.permissions?.entradas;
+    document.getElementById("permMovimientosUser").checked    = !!user.permissions?.movimientos;
+    document.getElementById("permSalidasUser").checked        = !!user.permissions?.salidas;
+    document.getElementById("permUsuariosUser").checked       = !!user.permissions?.usuarios;
+    document.getElementById("permTiendasUser").checked        = !!user.permissions?.tiendas;
+    document.getElementById("permEmpleadosUser").checked      = !!user.permissions?.empleados;
+
     document.getElementById("userModalLabel").textContent = "Editar Usuario";
     new bootstrap.Modal(document.getElementById("userModal")).show();
   } catch (error) {
@@ -452,15 +449,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+// Manejo del submit del formulario de usuario
 document.getElementById("userForm").addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const userId = document.getElementById("userId").value;
+  const userId   = document.getElementById("userId").value;
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value.trim();
-  const tienda = document.getElementById("userStore").value;
-  const rol = document.getElementById("userRole").value;
-  const enabled = document.getElementById("userEnabled").value === "true";
+  const tienda   = document.getElementById("userStore").value;
+  const rol      = document.getElementById("userRole").value;
+  const enabled  = document.getElementById("userEnabled").value === "true";
 
   const permisos = {
     listaProductos: {
@@ -473,11 +471,11 @@ document.getElementById("userForm").addEventListener("submit", async (e) => {
         cargarTexto: document.getElementById("permLPCargarTexto").checked
       }
     },
-    // Los permisos de ver ventas, historial y preventas se asignan por defecto a true
+    // NUEVO: permiso de ingreso de productos (menú padre)
+    ingresoProductos: document.getElementById("permIngresoProductosUser").checked,
     ventasGenerales: true,
     historialVentas: true,
     preventas: true,
-    // Permiso de ver Empleados se toma del checkbox con id "permEmpleadosUser"
     empleados: document.getElementById("permEmpleadosUser")?.checked || false,
     entradas: document.getElementById("permEntradasUser").checked,
     movimientos: document.getElementById("permMovimientosUser").checked,
