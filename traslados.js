@@ -60,10 +60,10 @@ async function loadMyTransfers(){
   if (loggedUserRole.toLowerCase() === "admin") {
     const of = document.getElementById("storeSelectOrigin").value;
     q = of
-      ? query(ref, where("origin", "==", of), orderBy("date", "desc"))
-      : query(ref, orderBy("date", "desc"));
+      ? query(ref, where("origin","==",of), orderBy("date","desc"))
+      : query(ref, orderBy("date","desc"));
   } else {
-    q = query(ref, where("pedidoPor", "==", loggedUser), orderBy("date", "desc"));
+    q = query(ref, where("pedidoPor","==",loggedUser), orderBy("date","desc"));
   }
   const snap = await getDocs(q);
   const tbody = document.querySelector("#myTransfersTable tbody");
@@ -73,7 +73,7 @@ async function loadMyTransfers(){
     const r = tbody.insertRow();
     r.insertCell().textContent = docSnap.id.slice(0,6);
     let ph="", qh="";
-    (t.products||[]).forEach(it => {
+    (t.products||[]).forEach(it=>{
       ph += it.productId + "<br>";
       qh += it.quantity  + "<br>";
     });
@@ -122,7 +122,7 @@ async function loadPendingTransfers(){
     r.insertCell().textContent = docSnap.id.slice(0,6);
     r.insertCell().textContent = t.date?.toDate?.().toLocaleString() || "";
     let ph="", qh="";
-    (t.products||[]).forEach(it => {
+    (t.products||[]).forEach(it=>{
       ph += it.productId + "<br>";
       qh += it.quantity  + "<br>";
     });
@@ -137,31 +137,35 @@ async function loadPendingTransfers(){
 
 /** 6) Show validation detail: fills the detail card and product table */
 async function showValidationDetail(id){
+  const detail = document.getElementById("transferDetail");
+  detail.dataset.id = id;
+
   // Fetch traslado data
   const snap = await getDocs(query(collection(db,"traslados"), where("__name__","==",id)));
-  const t = snap.docs[0].data();
+  const t    = snap.docs[0].data();
 
   // Fill metadata
   document.getElementById("detailId").textContent       = id.slice(0,6);
   document.getElementById("detailPedidoPor").textContent = t.pedidoPor||"-";
 
-  // Fill products table
+  // Fill products detail table
   const tbody = document.getElementById("detailProductsBody");
   tbody.innerHTML = "";
   for (const it of t.products) {
     const pSnap = await getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)));
-    const p = pSnap.docs[0].data();
-    const tr = document.createElement("tr");
+    const p     = pSnap.docs[0].data();
+    const tr    = document.createElement("tr");
     tr.innerHTML = `
       <td>${p.codigo}</td>
       <td>${p.descripcion}</td>
-      <td>${it.quantity}</td>
-    `;
+      <td>${p.talla||""}</td>
+      <td>${p.color||""}</td>
+      <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
+      <td>${it.quantity}</td>`;
     tbody.appendChild(tr);
   }
 
-  // Show detail card
-  document.getElementById("transferDetail").style.display = "block";
+  detail.style.display = "block";
 }
 
 /** 7) Validate transfer: subtract origin & add destination */
@@ -219,9 +223,7 @@ async function showTransferForm(){
 async function editTransfer(id){
   const snap = await getDocs(query(collection(db,"traslados"), where("__name__","==",id)));
   const t    = snap.docs[0].data();
-  if (t.status !== "pendiente") {
-    return Swal.fire("Error","Solo pendientes","error");
-  }
+  if (t.status !== "pendiente") return Swal.fire("Error","Solo pendientes","error");
   selectedProducts = t.products||[];
   updateSelectedProductsDisplay();
   document.getElementById("transferId").value           = id;
@@ -392,9 +394,9 @@ function updateSelectedProductsDisplay(){
   selectedProducts.forEach((it, i) => {
     getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)))
       .then(snap => {
-        const p = snap.docs[0].data();
+        const p     = snap.docs[0].data();
         const stock = getStockForProduct(p);
-        const tr = document.createElement("tr");
+        const tr    = document.createElement("tr");
         tr.innerHTML = `
           <td>${p.codigo}</td>
           <td>${p.descripcion}</td>
