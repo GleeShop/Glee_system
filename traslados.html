@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -24,11 +23,16 @@
   <!-- DataTables JS -->
   <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+  <!-- html2canvas para descargar constancia -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Estilos personalizados -->
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <!-- Logo oculto para constancia -->
+  <img id="constanciaLogo" src="img/gleed2.png" style="display:none" alt="Logo Gleed2"/>
+
   <div class="container my-4">
     <h1 class="mb-4">Gestión de Traslados</h1>
 
@@ -50,8 +54,6 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>Productos</th>
-          <th>Cant.</th>
           <th>Origen</th>
           <th>Destino</th>
           <th>Fecha</th>
@@ -87,40 +89,66 @@
       <tbody></tbody>
     </table>
 
-    <!-- Detalle con tabla completa -->
-    <div id="transferDetail" class="card p-3 mt-4" style="display:none">
-      <h4>Detalle del Pedido</h4>
-      <p><strong>ID:</strong> <span id="detailId"></span></p>
-      <p><strong>Pedido Por:</strong> <span id="detailPedidoPor"></span></p>
+    <h2 class="mt-4">Historial de Traslados Recibidos</h2>
+    <table id="receivedTransfersTable" class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Origen</th>
+          <th>Destino</th>
+          <th>Fecha de Recepción</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-      <table class="table table-bordered mt-3">
-        <thead>
-          <tr>
-            <th>Código</th>
-            <th>Descripción</th>
-            <th>Talla</th>
-            <th>Color</th>
-            <th>Precio</th>
-            <th>Cantidad a recibir</th>
-          </tr>
-        </thead>
-        <tbody id="detailProductsBody"></tbody>
-      </table>
-
-      <button class="btn btn-success" onclick="validateTransfer()">
-        Pedido Recibido
-      </button>
+  <!-- Modal Ver Traslado -->
+  <div class="modal fade" id="viewTransferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Detalle del Traslado</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p><strong>ID:</strong> <span id="detailId"></span></p>
+          <p><strong>Enviado por:</strong> <span id="detailPedidoPor"></span></p>
+          <table class="table table-bordered mt-3">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Talla</th>
+                <th>Color</th>
+                <th>Precio</th>
+                <th>Cantidad a recibir</th>
+              </tr>
+            </thead>
+            <tbody id="detailProductsBody"></tbody>
+          </table>
+          <!-- Este botón sólo se mostrará vía JS en la sección "Pendientes" -->
+          <button id="validateBtn"
+                  class="btn btn-success"
+                  style="display:none"
+                  onclick="validateTransfer()">
+            Pedido Recibido
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Modal Traslado -->
-  <div class="modal fade" id="transferModal" tabindex="-1" aria-hidden="true">
+  <!-- Modal Nuevo/Editar Traslado -->
+  <div class="modal fade" id="transferModal" tabindex="-1"
+       data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <form id="transferForm">
           <div class="modal-header">
             <h5 class="modal-title" id="transferModalLabel">Nuevo Traslado</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <div class="modal-body">
             <input type="hidden" id="transferId" />
@@ -133,6 +161,11 @@
                   <option value="">Seleccione destino</option>
                 </select>
               </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Enviado por</label>
+              <input id="transferSender" class="form-control" required placeholder="Nombre de quien envía"/>
             </div>
 
             <div class="mb-3">
@@ -157,7 +190,9 @@
                 </thead>
                 <tbody></tbody>
               </table>
-              <button type="button" class="btn btn-secondary mt-2" onclick="openProductSearchModal()">
+              <button type="button"
+                      class="btn btn-secondary mt-2"
+                      onclick="openProductSearchModal()">
                 Agregar producto
               </button>
             </div>
@@ -171,13 +206,13 @@
     </div>
   </div>
 
-  <!-- Modal Búsqueda Dinámica con DataTables -->
+  <!-- Modal Búsqueda Productos -->
   <div class="modal fade" id="productSearchModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
-      <div class="modal-content">
+      <div class="modal-content" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-header">
           <h5 class="modal-title">Buscar Productos</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body">
           <table id="productSearchTable" class="table table-striped table-bordered">
@@ -205,4 +240,3 @@
   <script type="module" src="traslados.js"></script>
 </body>
 </html>
-```

@@ -4,8 +4,10 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   updateDoc,
   addDoc,
+  deleteDoc,
   query,
   orderBy,
   where,
@@ -15,27 +17,26 @@ import {
 
 // — Globals —
 let allStores = [];
-let selectedProducts = []; // { productId, quantity }
+let selectedProducts = [];
 let productTable = null;
 
-// User info
 const loggedUser      = localStorage.getItem("loggedUser")      || "";
 const loggedUserRole  = localStorage.getItem("loggedUserRole")  || "";
 const loggedUserStore = localStorage.getItem("loggedUserStore") || "";
 
 /** 1) Load all stores */
-async function loadAllStores(){
+async function loadAllStores() {
   const snap = await getDocs(query(collection(db, "tiendas"), orderBy("nombre")));
   allStores = snap.docs.map(d => d.data().nombre);
 }
 
 /** 2) Populate admin filters */
-function populateAdminFilters(){
+function populateAdminFilters() {
   if (loggedUserRole.toLowerCase() !== "admin") return;
   const oSel = document.getElementById("storeSelectOrigin");
   const dSel = document.getElementById("storeSelectDestination");
   allStores.forEach(name => {
-    let opt = document.createElement("option");
+    const opt = document.createElement("option");
     opt.value = opt.textContent = name;
     oSel.append(opt.cloneNode(true));
     dSel.append(opt.cloneNode(true));
@@ -46,15 +47,14 @@ function populateAdminFilters(){
   dSel.onchange = loadPendingTransfers;
 }
 
-/** 3) Get stock for a product in the selected origin store */
-function getStockForProduct(p){
+/** 3) Get stock for product in the selected origin store */
+function getStockForProduct(p) {
   const origin = document.getElementById("transferOrigin")?.value || loggedUserStore;
-  if (!origin || !p.stock || typeof p.stock !== "object") return 0;
-  return p.stock[origin] || 0;
+  return p.stock?.[origin] || 0;
 }
 
-/** 4) Load "My Transfers" table */
-async function loadMyTransfers(){
+/** 4) Load "Mis Traslados" */
+async function loadMyTransfers() {
   const ref = collection(db, "traslados");
   let q;
   if (loggedUserRole.toLowerCase() === "admin") {
@@ -68,35 +68,26 @@ async function loadMyTransfers(){
   const snap = await getDocs(q);
   const tbody = document.querySelector("#myTransfersTable tbody");
   tbody.innerHTML = "";
-  snap.forEach(docSnap => {
+  snap.docs.forEach((docSnap, i) => {
     const t = docSnap.data();
     const r = tbody.insertRow();
-    r.insertCell().textContent = docSnap.id.slice(0,6);
-    let ph="", qh="";
-    (t.products||[]).forEach(it=>{
-      ph += it.productId + "<br>";
-      qh += it.quantity  + "<br>";
-    });
-    r.insertCell().innerHTML = ph;
-    r.insertCell().innerHTML = qh;
+    r.insertCell().textContent = String(i+1);
     r.insertCell().textContent = t.origin;
     r.insertCell().textContent = t.destination;
     r.insertCell().textContent = t.date?.toDate?.().toLocaleString() || "";
     r.insertCell().textContent = (t.status||"ACTIVO").toUpperCase();
     const ac = r.insertCell();
-    if (t.status === "pendiente") {
-      ac.innerHTML = `
-        <button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
-        <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>`;
-    } else {
-      ac.textContent = "-";
-    }
+    ac.innerHTML = t.status === "pendiente"
+      ? `<button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
+         <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
+         <button class="btn btn-sm btn-danger" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>`
+      : `<button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
+         <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>`;
   });
 }
 
-/** 5) Load "Pending Transfers" table */
-async function loadPendingTransfers(){
+/** 5) Load "Pendientes" */
+async function loadPendingTransfers() {
   const ref = collection(db, "traslados");
   let q;
   if (loggedUserRole.toLowerCase() === "admin") {
@@ -106,7 +97,9 @@ async function loadPendingTransfers(){
           where("destination","==",dest),
           where("status","==","pendiente"),
           orderBy("date","desc"))
-      : query(ref, where("status","==","pendiente"), orderBy("date","desc"));
+      : query(ref,
+          where("status","==","pendiente"),
+          orderBy("date","desc"));
   } else {
     q = query(ref,
       where("destination","==",loggedUserStore),
@@ -116,63 +109,88 @@ async function loadPendingTransfers(){
   const snap = await getDocs(q);
   const tbody = document.querySelector("#pendingTransfersTable tbody");
   tbody.innerHTML = "";
-  snap.forEach(docSnap => {
+  snap.docs.forEach(docSnap => {
     const t = docSnap.data();
     const r = tbody.insertRow();
     r.insertCell().textContent = docSnap.id.slice(0,6);
     r.insertCell().textContent = t.date?.toDate?.().toLocaleString() || "";
-    let ph="", qh="";
-    (t.products||[]).forEach(it=>{
+    let ph = "", qh = "";
+    t.products?.forEach(it => {
       ph += it.productId + "<br>";
       qh += it.quantity  + "<br>";
     });
     r.insertCell().innerHTML = ph;
     r.insertCell().innerHTML = qh;
-    r.insertCell().textContent = t.pedidoPor||"-";
+    r.insertCell().textContent = t.pedidoPor || "-";
     r.insertCell().textContent = "—";
     const ac = r.insertCell();
     ac.innerHTML = `<button class="btn btn-sm btn-info" onclick="showValidationDetail('${docSnap.id}')">Ver</button>`;
   });
 }
 
-/** 6) Show validation detail: fills the detail card and product table */
-async function showValidationDetail(id){
-  const detail = document.getElementById("transferDetail");
-  detail.dataset.id = id;
-
-  // Fetch traslado data
-  const snap = await getDocs(query(collection(db,"traslados"), where("__name__","==",id)));
-  const t    = snap.docs[0].data();
-
-  // Fill metadata
-  document.getElementById("detailId").textContent       = id.slice(0,6);
-  document.getElementById("detailPedidoPor").textContent = t.pedidoPor||"-";
-
-  // Fill products detail table
-  const tbody = document.getElementById("detailProductsBody");
-  tbody.innerHTML = "";
-  for (const it of t.products) {
-    const pSnap = await getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)));
-    const p     = pSnap.docs[0].data();
-    const tr    = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${p.codigo}</td>
-      <td>${p.descripcion}</td>
-      <td>${p.talla||""}</td>
-      <td>${p.color||""}</td>
-      <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
-      <td>${it.quantity}</td>`;
-    tbody.appendChild(tr);
+/** 6) Load "Recibidos" history */
+async function loadReceivedTransfers() {
+  const ref = collection(db, "traslados");
+  let q;
+  if (loggedUserRole.toLowerCase() === "admin") {
+    q = query(ref, where("status","==","validado"), orderBy("dateValidation","desc"));
+  } else {
+    q = query(ref,
+      where("destination","==",loggedUserStore),
+      where("status","==","validado"),
+      orderBy("dateValidation","desc"));
   }
-
-  detail.style.display = "block";
+  const snap = await getDocs(q);
+  const tbody = document.querySelector("#receivedTransfersTable tbody");
+  tbody.innerHTML = "";
+  snap.docs.forEach((docSnap, i) => {
+    const t = docSnap.data();
+    const r = tbody.insertRow();
+    r.insertCell().textContent = String(i+1);
+    r.insertCell().textContent = t.origin;
+    r.insertCell().textContent = t.destination;
+    r.insertCell().textContent = t.dateValidation?.toDate?.().toLocaleString() || "";
+    const ac = r.insertCell();
+    ac.innerHTML = `<button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
+                    <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>`;
+  });
 }
 
-/** 7) Validate transfer: subtract origin & add destination */
-async function validateTransfer(){
-  const detail = document.getElementById("transferDetail");
-  const tid    = detail.dataset.id;
-  if (!tid) return;
+/** 7) Show detail, toggle validate button */
+async function showValidationDetail(id) {
+  const modalEl = document.getElementById("viewTransferModal");
+  modalEl.dataset.id = id;
+  const snap = await getDoc(doc(db,"traslados",id));
+  if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
+  const t = snap.data();
+  document.getElementById("detailId").textContent       = id.slice(0,6);
+  document.getElementById("detailPedidoPor").textContent = t.sender || "-";
+  const tbody = document.getElementById("detailProductsBody");
+  tbody.innerHTML = "";
+  t.products?.forEach(it => {
+    getDoc(doc(db,"productos",it.productId)).then(pSnap => {
+      const p = pSnap.data();
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${p.codigo}</td>
+        <td>${p.descripcion}</td>
+        <td>${p.talla||""}</td>
+        <td>${p.color||""}</td>
+        <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
+        <td>${it.quantity}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+  document.getElementById("validateBtn").style.display =
+    t.status === "pendiente" ? "inline-block" : "none";
+  new bootstrap.Modal(modalEl).show();
+}
+
+/** 8) Validate transfer */
+async function validateTransfer() {
+  const modalEl = document.getElementById("viewTransferModal");
+  const id = modalEl.dataset.id;
+  if (!id) return;
   const res = await Swal.fire({
     title: "Confirmar recepción?",
     icon: "question",
@@ -181,70 +199,104 @@ async function validateTransfer(){
   });
   if (!res.isConfirmed) return;
 
-  // Fetch traslado
-  const snap = await getDocs(query(collection(db,"traslados"), where("__name__","==",tid)));
-  const t    = snap.docs[0].data();
-  const { origin, destination, products } = t;
-
-  // Update stocks
-  for (const it of products) {
-    const prodRef = doc(db,"productos",it.productId);
-    await updateDoc(prodRef, {
-      [`stock.${origin}`]:      increment(-it.quantity),
-      [`stock.${destination}`]: increment(it.quantity)
+  const ref = doc(db,"traslados",id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
+  const t = snap.data();
+  for (const it of t.products||[]) {
+    const pRef = doc(db,"productos",it.productId);
+    await updateDoc(pRef, {
+      [`stock.${t.origin}`]:      increment(-it.quantity),
+      [`stock.${t.destination}`]: increment( it.quantity)
     });
   }
-
-  // Mark validated
-  const tRef = doc(db,"traslados",tid);
-  await updateDoc(tRef, {
+  await updateDoc(ref, {
     status: "validado",
     dateValidation: serverTimestamp()
   });
-
   Swal.fire("Éxito","Stock actualizado","success");
-  detail.style.display = "none";
+  bootstrap.Modal.getInstance(modalEl).hide();
   loadMyTransfers();
   loadPendingTransfers();
+  loadReceivedTransfers();
 }
 
-/** 8) Show Transfer Form */
-async function showTransferForm(){
+/** 9) Show new/edit form with static backdrop/keyboard=false */
+async function showTransferForm() {
   document.getElementById("transferForm").reset();
-  document.getElementById("transferId").value = "";
   selectedProducts = [];
   updateSelectedProductsDisplay();
   await loadAllStores();
   await setOriginStore();
-  new bootstrap.Modal(document.getElementById("transferModal")).show();
+  const modal = new bootstrap.Modal(
+    document.getElementById("transferModal"),
+    { backdrop: 'static', keyboard: false }
+  );
+  modal.show();
 }
 
-/** 9) Edit Transfer */
-async function editTransfer(id){
-  const snap = await getDocs(query(collection(db,"traslados"), where("__name__","==",id)));
-  const t    = snap.docs[0].data();
+/** 10) Edit transfer */
+async function editTransfer(id) {
+  const ref = doc(db,"traslados",id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
+  const t = snap.data();
   if (t.status !== "pendiente") return Swal.fire("Error","Solo pendientes","error");
   selectedProducts = t.products||[];
   updateSelectedProductsDisplay();
-  document.getElementById("transferId").value           = id;
-  document.getElementById("transferComments").value     = t.comments||"";
+  document.getElementById("transferId").value       = id;
+  document.getElementById("transferSender").value   = t.sender||"";
+  document.getElementById("transferComments").value = t.comments||"";
   document.getElementById("transferModalLabel").textContent = "Editar Traslado";
   await setOriginStore();
   populateDestinationSelect(t.origin);
-  document.getElementById("transferDestination").value   = t.destination;
-  new bootstrap.Modal(document.getElementById("transferModal")).show();
+  document.getElementById("transferDestination").value = t.destination;
+  const modal = new bootstrap.Modal(
+    document.getElementById("transferModal"),
+    { backdrop: 'static', keyboard: false }
+  );
+  modal.show();
 }
 
-/** 10) Save Transfer (create/update without stock changes) */
+/** 11) Delete transfer */
+async function deleteTransfer(id) {
+  const r = await Swal.fire({
+    title: "¿Eliminar traslado?",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sí"
+  });
+  if (!r.isConfirmed) return;
+  await deleteDoc(doc(db,"traslados",id));
+  Swal.fire("Eliminado","Traslado eliminado","success");
+  loadMyTransfers();
+}
+
+/** 12) Annul transfer */
+async function annulTransfer(id) {
+  const r = await Swal.fire({
+    title: "¿Anular traslado?",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sí"
+  });
+  if (!r.isConfirmed) return;
+  await updateDoc(doc(db,"traslados",id), { status: "anulado" });
+  Swal.fire("Anulado","Traslado anulado","success");
+  loadMyTransfers();
+}
+
+/** 13) Save transfer */
 document.getElementById("transferForm").addEventListener("submit", async e => {
   e.preventDefault();
-  const origin = document.getElementById("transferOrigin")?.value || "";
-  const dest   = document.getElementById("transferDestination").value;
-  const comm   = document.getElementById("transferComments").value;
-  if (!origin || !dest || !selectedProducts.length) {
+  const origin      = document.getElementById("transferOrigin")?.value || "";
+  const destination = document.getElementById("transferDestination").value;
+  const sender      = document.getElementById("transferSender").value.trim();
+  const comments    = document.getElementById("transferComments").value;
+  if (!origin||!destination||!sender||!selectedProducts.length) {
     return Swal.fire("Error","Complete todos los campos","error");
   }
-  if (origin === dest) {
+  if (origin === destination) {
     return Swal.fire("Error","Origen≠Destino","error");
   }
   const r = await Swal.fire({
@@ -255,42 +307,42 @@ document.getElementById("transferForm").addEventListener("submit", async e => {
   });
   if (!r.isConfirmed) return;
 
-  const pedidoPor = loggedUser||"unknown";
-  const tid       = document.getElementById("transferId").value;
+  const data = {
+    products: selectedProducts,
+    origin,
+    destination,
+    sender,
+    comments,
+    pedidoPor: loggedUser||"unknown",
+    date: serverTimestamp(),
+    status: "pendiente"
+  };
+  const tid = document.getElementById("transferId").value;
   if (!tid) {
-    await addDoc(collection(db,"traslados"), {
-      products: selectedProducts,
-      origin,
-      destination: dest,
-      comments: comm,
-      pedidoPor,
-      date: serverTimestamp(),
-      status: "pendiente"
-    });
+    await addDoc(collection(db,"traslados"), data);
     Swal.fire("Éxito","Traslado creado","success");
   } else {
-    const tRef = doc(db,"traslados",tid);
-    await updateDoc(tRef, {
-      products: selectedProducts,
-      origin,
-      destination: dest,
-      comments: comm,
-      date: serverTimestamp()
-    });
+    delete data.status;
+    delete data.date;
+    await updateDoc(doc(db,"traslados",tid), data);
     Swal.fire("Éxito","Traslado actualizado","success");
   }
 
-  bootstrap.Modal.getInstance(document.getElementById("transferModal")).hide();
+  // hide and reset form
+  const modal = bootstrap.Modal.getInstance(document.getElementById("transferModal"));
+  modal.hide();
+  document.getElementById("transferForm").reset();
   selectedProducts = [];
   updateSelectedProductsDisplay();
+
   loadMyTransfers();
   loadPendingTransfers();
 });
 
-/** 11) Set Origin Store */
-async function setOriginStore(){
+/** 14) Set origin store */
+async function setOriginStore() {
   const snapU = await getDocs(query(collection(db,"usuarios"), where("username","==",loggedUser)));
-  const u     = snapU.docs[0].data();
+  const u = snapU.docs[0].data();
   if (loggedUserRole.toLowerCase()==="admin") {
     let html = `
       <div class="col-md-6 mb-3">
@@ -313,24 +365,27 @@ async function setOriginStore(){
   }
 }
 
-/** 12) Populate Destination select */
-function populateDestinationSelect(origin){
+/** 15) Populate destination */
+function populateDestinationSelect(origin) {
   const sel = document.getElementById("transferDestination");
   sel.innerHTML = `<option value="">Seleccione destino</option>`;
   allStores.forEach(n => {
     if (n !== origin) {
-      let o = document.createElement("option");
+      const o = document.createElement("option");
       o.value = o.textContent = n;
       sel.append(o);
     }
   });
 }
 
-/** 13) Open Product Search Modal & init DataTable */
-async function openProductSearchModal(){
+/** 16) Open product search modal */
+function openProductSearchModal() {
   const modalEl = document.getElementById("productSearchModal");
   new bootstrap.Modal(modalEl).show();
+}
 
+/** 17) Initialize product search on shown */
+document.getElementById("productSearchModal").addEventListener("shown.bs.modal", async () => {
   const snap = await getDocs(query(collection(db,"productos"), orderBy("descripcion")));
   const data = snap.docs.map(d => {
     const p = d.data();
@@ -344,21 +399,19 @@ async function openProductSearchModal(){
       stock: getStockForProduct(p)
     };
   });
-
   if (productTable) {
     productTable.clear().destroy();
     $("#productSearchTable tbody").off();
   }
-
   productTable = $("#productSearchTable").DataTable({
     data,
     columns: [
-      { data: "codigo" },
-      { data: "descripcion" },
-      { data: "color" },
-      { data: "talla" },
-      { data: "precio" },
-      { data: "stock" },
+      { data:"codigo" },
+      { data:"descripcion" },
+      { data:"color" },
+      { data:"talla" },
+      { data:"precio" },
+      { data:"stock" },
       {
         data: null,
         defaultContent: `<button class="btn btn-sm btn-primary">Agregar</button>`,
@@ -376,81 +429,126 @@ async function openProductSearchModal(){
     }
   });
 
-  $("#productSearchTable tbody").on("click", "button", function(){
-    const rowData = productTable.row($(this).parents('tr')).data();
-    if (selectedProducts.some(x => x.productId === rowData.id)) {
+  $("#productSearchTable tbody").on("click", "button", function() {
+    const row = productTable.row($(this).parents('tr')).data();
+    if (selectedProducts.some(x => x.productId === row.id)) {
       return Swal.fire("Aviso","Producto ya agregado","info");
     }
-    selectedProducts.push({ productId: rowData.id, quantity: 1 });
+    selectedProducts.push({ productId: row.id, quantity: 1 });
     updateSelectedProductsDisplay();
-    bootstrap.Modal.getInstance(modalEl).hide();
+    // hide only the product search modal
+    bootstrap.Modal.getInstance(document.getElementById("productSearchModal")).hide();
   });
-}
+});
 
-/** 14) Update selected products display */
-function updateSelectedProductsDisplay(){
+/** 18) Update selected products table */
+function updateSelectedProductsDisplay() {
   const tbody = document.querySelector("#selectedProductsTable tbody");
   tbody.innerHTML = "";
-  selectedProducts.forEach((it, i) => {
-    getDocs(query(collection(db,"productos"), where("__name__","==",it.productId)))
-      .then(snap => {
-        const p     = snap.docs[0].data();
-        const stock = getStockForProduct(p);
-        const tr    = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${p.codigo}</td>
-          <td>${p.descripcion}</td>
-          <td>${p.color||""}</td>
-          <td>${p.talla||""}</td>
-          <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
-          <td>${stock}</td>
-          <td>
-            <input type="number" min="1" max="${stock}" value="${it.quantity}"
-              onchange="updateProductQuantity(${i}, this.value)"
-              class="form-control form-control-sm" style="width:80px;"/>
-          </td>
-          <td>
-            <button class="btn btn-sm btn-danger" onclick="removeSelectedProduct(${i})">
-              Eliminar
-            </button>
-          </td>`;
-        tbody.append(tr);
-      });
+  selectedProducts.forEach((it,i) => {
+    getDoc(doc(db,"productos",it.productId)).then(snap => {
+      const p = snap.data();
+      const stock = getStockForProduct(p);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${p.codigo}</td>
+        <td>${p.descripcion}</td>
+        <td>${p.color||""}</td>
+        <td>${p.talla||""}</td>
+        <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
+        <td>${stock}</td>
+        <td>
+          <input type="number" min="1" max="${stock}" value="${it.quantity}"
+            onchange="updateProductQuantity(${i}, this.value)"
+            class="form-control form-control-sm" style="width:80px;"/>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-danger" onclick="removeSelectedProduct(${i})">Eliminar</button>
+        </td>`;
+      tbody.append(tr);
+    });
   });
 }
 
-/** 15) Update quantity for selected product */
-function updateProductQuantity(idx, val){
-  let q = parseInt(val,10) || 1;
-  if (q < 1) q = 1;
+/** 19) Update product quantity */
+function updateProductQuantity(idx,val) {
+  let q = parseInt(val,10)||1;
+  if (q<1) q=1;
   selectedProducts[idx].quantity = q;
 }
 
-/** 16) Remove a selected product */
-function removeSelectedProduct(idx){
+/** 20) Remove selected product */
+function removeSelectedProduct(idx) {
   selectedProducts.splice(idx,1);
   updateSelectedProductsDisplay();
 }
 
-/** 17) Dummy delete/anul */
-function deleteTransfer(id){ console.log("delete",id); }
-function annulTransfer(id){ console.log("annul",id); }
+/** 21) Download constancia */
+async function downloadConstancia(id) {
+  const snap = await getDoc(doc(db,"traslados",id));
+  if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
+  const t = snap.data();
+  const date = t.dateValidation?.toDate?.() || t.date?.toDate?.() || new Date();
+  const container = document.createElement("div");
+  container.style.background = "#fff";
+  container.style.padding = "20px";
+  container.style.width = "800px";
+  const logo = document.getElementById("constanciaLogo").src;
+  container.innerHTML = `
+    <img src="${logo}" style="width:150px;"/>
+    <h3>Constancia de Recibido</h3>
+    <p><strong>Tienda Origen:</strong> ${t.origin}</p>
+    <p><strong>Enviado a:</strong> ${t.destination}</p>
+    <p><strong>Enviado por:</strong> ${t.sender}</p>
+    <p><strong>Fecha de recepción:</strong> ${date.toLocaleString()}</p>
+    <p><strong>Estado:</strong> ${t.status.toUpperCase()}</p>
+    <table style="width:100%;border-collapse:collapse;" border="1">
+      <thead><tr>
+        <th>Código</th><th>Descripción</th><th>Talla</th>
+        <th>Color</th><th>Precio</th><th>Cantidad</th>
+      </tr></thead>
+      <tbody>
+        ${await Promise.all(t.products.map(async it => {
+          const pSnap = await getDoc(doc(db,"productos",it.productId));
+          const p = pSnap.data();
+          return `<tr>
+            <td>${p.codigo}</td>
+            <td>${p.descripcion}</td>
+            <td>${p.talla||""}</td>
+            <td>${p.color||""}</td>
+            <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
+            <td>${it.quantity}</td>
+          </tr>`;
+        })).then(rows => rows.join(""))}
+      </tbody>
+    </table>`;
+  document.body.appendChild(container);
+  const canvas = await html2canvas(container);
+  const link = document.createElement("a");
+  link.href = canvas.toDataURL("image/png");
+  link.download = `recibido_${id}.png`;
+  link.click();
+  document.body.removeChild(container);
+}
 
-/** 18) Init on load */
-document.addEventListener("DOMContentLoaded", async ()=>{
+/** 22) Init on load */
+document.addEventListener("DOMContentLoaded", async () => {
   await loadAllStores();
   populateAdminFilters();
   loadMyTransfers();
   loadPendingTransfers();
+  loadReceivedTransfers();
 });
 
-// Expose globals for HTML onclicks
+// Expose for HTML onclicks
 window.showTransferForm       = showTransferForm;
 window.editTransfer           = editTransfer;
 window.validateTransfer       = validateTransfer;
 window.showValidationDetail   = showValidationDetail;
+window.downloadConstancia     = downloadConstancia;
 window.openProductSearchModal = openProductSearchModal;
 window.updateProductQuantity  = updateProductQuantity;
 window.removeSelectedProduct  = removeSelectedProduct;
 window.deleteTransfer         = deleteTransfer;
 window.annulTransfer          = annulTransfer;
+window.loadReceivedTransfers  = loadReceivedTransfers;
