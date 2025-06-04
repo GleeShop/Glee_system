@@ -79,10 +79,10 @@ async function ensureAdminRole() {
           listaProductos: {
             habilitado: true,
             botones: {
-              crear: true,
-              editar: true,
-              eliminar: true,
-              stock: true,
+              crearProducto: true,
+              editarProducto: true,
+              eliminarProducto: true,
+              modificarStock: true,
               cargarTexto: true
             }
           },
@@ -102,9 +102,55 @@ async function ensureAdminRole() {
   }
 }
 
+/**
+ * Se asegura de que exista un rol “bodega” con permisos
+ * solo para crear/editar/eliminar/stock en inventario y “Ingreso de productos”.
+ */
+async function ensureBodegaRole() {
+  try {
+    const rolesRef = collection(db, "roles");
+    const qBodega = query(rolesRef, where("roleName", "==", "bodega"));
+    const snapshot = await getDocs(qBodega);
+
+    if (snapshot.empty) {
+      await addDoc(rolesRef, {
+        roleName: "bodega",
+        roleDescription: "Rol de Bodega: solo crear/editar/eliminar/stock en inventario",
+        permissions: {
+          listaProductos: {
+            habilitado: true,
+            botones: {
+              crearProducto:    true,
+              editarProducto:   true,
+              eliminarProducto: true,
+              modificarStock:   true,
+              cargarTexto:      false
+            }
+          },
+          ingresoProductos: true,
+          entradas:         false,
+          movimientos:      false,
+          salidas:          false,
+          usuarios:         false,
+          tiendas:          false,
+          ventasGenerales:  false,
+          historialVentas:  false,
+          preventas:        false
+        }
+      });
+      console.log("Se creó el rol ‘bodega’ en Firestore con los permisos correctos.");
+    }
+  } catch (error) {
+    console.error("Error asegurando rol bodega:", error);
+  }
+}
+
 async function loadRoles() {
   try {
+    // Primero nos aseguramos de que existan los roles "admin" y "bodega"
     await ensureAdminRole();
+    await ensureBodegaRole();
+
     const rolesRef = collection(db, "roles");
     const qRoles = query(rolesRef, orderBy("roleName"));
     const snapshot = await getDocs(qRoles);
@@ -134,18 +180,36 @@ function loadRolesTable() {
   roles.forEach((role) => {
     const row = tbody.insertRow();
     row.insertCell(0).textContent = role.roleName;
+
+    // Construir el listado de permisos
     const perms = [];
     if (role.permissions) {
-      if (role.permissions.listaProductos) {
-        perms.push("listaProductos");
-      }
-      for (const key in role.permissions) {
-        if (key !== "listaProductos" && role.permissions[key]) {
-          perms.push(key);
+      // Manejo de listaProductos y sus botones
+      if (role.permissions.listaProductos?.habilitado) {
+        const btns = [];
+        const lp = role.permissions.listaProductos.botones || {};
+        if (lp.crearProducto)    btns.push("CrearProducto");
+        if (lp.editarProducto)   btns.push("EditarProducto");
+        if (lp.eliminarProducto) btns.push("EliminarProducto");
+        if (lp.modificarStock)   btns.push("ModificarStock");
+        if (btns.length) {
+          perms.push(`ListaProductos(${btns.join("|")})`);
+        } else {
+          perms.push("ListaProductos");
         }
       }
+      // Permiso de Ingreso de Productos
+      if (role.permissions.ingresoProductos) perms.push("IngresoProductos");
+      // Permisos generales
+      if (role.permissions.entradas)        perms.push("Entradas");
+      if (role.permissions.movimientos)     perms.push("Movimientos");
+      if (role.permissions.salidas)         perms.push("Salidas");
+      if (role.permissions.usuarios)        perms.push("Usuarios");
+      if (role.permissions.tiendas)         perms.push("Tiendas");
+      // ventasGenerales, historialVentas y preventas se asumen false
     }
     row.insertCell(1).textContent = perms.join(", ");
+
     const cellActions = row.insertCell(2);
     cellActions.innerHTML = `
       <button class="btn btn-sm btn-primary me-1" onclick="editRole('${role.id}')">Editar</button>
@@ -175,22 +239,48 @@ document.getElementById("roleForm").addEventListener("submit", async (e) => {
     Swal.fire("Error", "Ingrese un nombre de rol.", "error");
     return;
   }
+
+  // Construcción del objeto de permisos, con las llaves que coinciden con Firestore
   const rolePerms = {
-    entradas: document.getElementById("permEntradasRole").checked,
-    movimientos: document.getElementById("permMovimientosRole").checked,
-    salidas: document.getElementById("permSalidasRole").checked,
-    usuarios: document.getElementById("permUsuariosRole").checked,
-    tiendas: document.getElementById("permTiendasRole").checked,
-    ventasGenerales: true,
-    historialVentas: true,
-    preventas: true
+    listaProductos: {
+      habilitado: document.getElementById("permListaProductosRole").checked,
+      botones: {
+        crearProducto:    document.getElementById("permLPCrearRole").checked,
+        editarProducto:   document.getElementById("permLPEditarRole").checked,
+        eliminarProducto: document.getElementById("permLPEliminarRole").checked,
+        modificarStock:   document.getElementById("permLPStockRole").checked,
+        cargarTexto:      document.getElementById("permLPCargarTextoRole")
+                          ? document.getElementById("permLPCargarTextoRole").checked
+                          : false
+      }
+    },
+    ingresoProductos: document.getElementById("permIngresoProductosRole")
+                       ? document.getElementById("permIngresoProductosRole").checked
+                       : false,
+    entradas:        document.getElementById("permEntradasRole").checked,
+    movimientos:     document.getElementById("permMovimientosRole").checked,
+    salidas:         document.getElementById("permSalidasRole").checked,
+    usuarios:        document.getElementById("permUsuariosRole").checked,
+    tiendas:         document.getElementById("permTiendasRole").checked,
+    ventasGenerales: false,
+    historialVentas: false,
+    preventas:       false
   };
+
   try {
     if (roleId) {
-      await updateDoc(doc(db, "roles", roleId), { roleName, permissions: rolePerms });
+      // Actualizar rol existente
+      await updateDoc(doc(db, "roles", roleId), {
+        roleName,
+        permissions: rolePerms
+      });
       Swal.fire("Éxito", "Rol actualizado.", "success");
     } else {
-      await addDoc(collection(db, "roles"), { roleName, permissions: rolePerms });
+      // Crear nuevo rol
+      await addDoc(collection(db, "roles"), {
+        roleName,
+        permissions: rolePerms
+      });
       Swal.fire("Éxito", "Rol creado.", "success");
     }
     bootstrap.Modal.getInstance(document.getElementById("roleEditModal")).hide();
@@ -212,11 +302,41 @@ window.editRole = async function (roleId) {
     const roleData = docSnap.data();
     document.getElementById("roleId").value = roleId;
     document.getElementById("roleName").value = roleData.roleName || "";
-    document.getElementById("permEntradasRole").checked = !!roleData.permissions?.entradas;
-    document.getElementById("permMovimientosRole").checked = !!roleData.permissions?.movimientos;
-    document.getElementById("permSalidasRole").checked = !!roleData.permissions?.salidas;
-    document.getElementById("permUsuariosRole").checked = !!roleData.permissions?.usuarios;
-    document.getElementById("permTiendasRole").checked = !!roleData.permissions?.tiendas;
+
+    // Cargar permisos de listaProductos
+    document.getElementById("permListaProductosRole").checked =
+      !!roleData.permissions?.listaProductos?.habilitado;
+    document.getElementById("permLPCrearRole").checked =
+      !!roleData.permissions?.listaProductos?.botones.crearProducto;
+    document.getElementById("permLPEditarRole").checked =
+      !!roleData.permissions?.listaProductos?.botones.editarProducto;
+    document.getElementById("permLPEliminarRole").checked =
+      !!roleData.permissions?.listaProductos?.botones.eliminarProducto;
+    document.getElementById("permLPStockRole").checked =
+      !!roleData.permissions?.listaProductos?.botones.modificarStock;
+    if (document.getElementById("permLPCargarTextoRole")) {
+      document.getElementById("permLPCargarTextoRole").checked =
+        !!roleData.permissions?.listaProductos?.botones.cargarTexto;
+    }
+
+    // Cargar permiso de ingresoProductos
+    if (document.getElementById("permIngresoProductosRole")) {
+      document.getElementById("permIngresoProductosRole").checked =
+        !!roleData.permissions?.ingresoProductos;
+    }
+
+    // Cargar permisos generales
+    document.getElementById("permEntradasRole").checked =
+      !!roleData.permissions?.entradas;
+    document.getElementById("permMovimientosRole").checked =
+      !!roleData.permissions?.movimientos;
+    document.getElementById("permSalidasRole").checked =
+      !!roleData.permissions?.salidas;
+    document.getElementById("permUsuariosRole").checked =
+      !!roleData.permissions?.usuarios;
+    document.getElementById("permTiendasRole").checked =
+      !!roleData.permissions?.tiendas;
+
     document.getElementById("roleEditModalLabel").textContent = "Editar Rol";
     new bootstrap.Modal(document.getElementById("roleEditModal")).show();
   } catch (error) {
@@ -269,7 +389,13 @@ async function loadUsers() {
       cellPassword.appendChild(spanPassword);
       const btnToggle = document.createElement("button");
       btnToggle.textContent = "Ver";
-      btnToggle.classList.add("btn", "btn-sm", "btn-outline-secondary", "ms-2", "btn-toggle-password");
+      btnToggle.classList.add(
+        "btn",
+        "btn-sm",
+        "btn-outline-secondary",
+        "ms-2",
+        "btn-toggle-password"
+      );
       btnToggle.addEventListener("click", () => {
         const span = document.getElementById(`pwd_${user.id}`);
         if (span.textContent === "******") {
@@ -284,7 +410,7 @@ async function loadUsers() {
 
       // Tienda y rol
       row.insertCell(2).textContent =
-        user.rol && user.rol.toLowerCase() === "admin" ? "-" : (user.tienda || "");
+        user.rol && user.rol.toLowerCase() === "admin" ? "-" : user.tienda || "";
       row.insertCell(3).textContent = user.rol || "";
       row.insertCell(4).textContent = user.enabled ? "Sí" : "No";
 
@@ -324,7 +450,10 @@ window.editUser = async function (userId) {
     document.getElementById("password").value = "";
     document.getElementById("userEnabled").value = user.enabled ? "true" : "false";
 
-    if ((user.rol && user.rol.toLowerCase() === "admin") || user.username.toLowerCase() === "admin") {
+    if (
+      (user.rol && user.rol.toLowerCase() === "admin") ||
+      user.username.toLowerCase() === "admin"
+    ) {
       document.getElementById("userStore").value = "";
       document.getElementById("userStore").disabled = true;
       document.getElementById("userRole").value = "admin";
@@ -337,22 +466,35 @@ window.editUser = async function (userId) {
     }
 
     // Cargar permisos existentes
-    document.getElementById("permListaProductos").checked   = !!user.permissions?.listaProductos?.habilitado;
-    document.getElementById("permLPCrear").checked          = !!user.permissions?.listaProductos?.botones.crear;
-    document.getElementById("permLPEditar").checked         = !!user.permissions?.listaProductos?.botones.editar;
-    document.getElementById("permLPEliminar").checked       = !!user.permissions?.listaProductos?.botones.eliminar;
-    document.getElementById("permLPStock").checked          = !!user.permissions?.listaProductos?.botones.stock;
-    document.getElementById("permLPCargarTexto").checked    = !!user.permissions?.listaProductos?.botones.cargarTexto;
+    document.getElementById("permListaProductos").checked =
+      !!user.permissions?.listaProductos?.habilitado;
+    document.getElementById("permLPCrear").checked =
+      !!user.permissions?.listaProductos?.botones.crearProducto;
+    document.getElementById("permLPEditar").checked =
+      !!user.permissions?.listaProductos?.botones.editarProducto;
+    document.getElementById("permLPEliminar").checked =
+      !!user.permissions?.listaProductos?.botones.eliminarProducto;
+    document.getElementById("permLPStock").checked =
+      !!user.permissions?.listaProductos?.botones.modificarStock;
+    document.getElementById("permLPCargarTexto").checked =
+      !!user.permissions?.listaProductos?.botones.cargarTexto;
 
     // NUEVO: permIngresoProductosUser
-    document.getElementById("permIngresoProductosUser").checked = !!user.permissions?.ingresoProductos;
+    document.getElementById("permIngresoProductosUser").checked =
+      !!user.permissions?.ingresoProductos;
 
-    document.getElementById("permEntradasUser").checked       = !!user.permissions?.entradas;
-    document.getElementById("permMovimientosUser").checked    = !!user.permissions?.movimientos;
-    document.getElementById("permSalidasUser").checked        = !!user.permissions?.salidas;
-    document.getElementById("permUsuariosUser").checked       = !!user.permissions?.usuarios;
-    document.getElementById("permTiendasUser").checked        = !!user.permissions?.tiendas;
-    document.getElementById("permEmpleadosUser").checked      = !!user.permissions?.empleados;
+    document.getElementById("permEntradasUser").checked =
+      !!user.permissions?.entradas;
+    document.getElementById("permMovimientosUser").checked =
+      !!user.permissions?.movimientos;
+    document.getElementById("permSalidasUser").checked =
+      !!user.permissions?.salidas;
+    document.getElementById("permUsuariosUser").checked =
+      !!user.permissions?.usuarios;
+    document.getElementById("permTiendasUser").checked =
+      !!user.permissions?.tiendas;
+    document.getElementById("permEmpleadosUser").checked =
+      !!user.permissions?.empleados;
 
     document.getElementById("userModalLabel").textContent = "Editar Usuario";
     new bootstrap.Modal(document.getElementById("userModal")).show();
@@ -464,24 +606,23 @@ document.getElementById("userForm").addEventListener("submit", async (e) => {
     listaProductos: {
       habilitado: document.getElementById("permListaProductos").checked,
       botones: {
-        crear: document.getElementById("permLPCrear").checked,
-        editar: document.getElementById("permLPEditar").checked,
-        eliminar: document.getElementById("permLPEliminar").checked,
-        stock: document.getElementById("permLPStock").checked,
-        cargarTexto: document.getElementById("permLPCargarTexto").checked
+        crearProducto:    document.getElementById("permLPCrear").checked,
+        editarProducto:   document.getElementById("permLPEditar").checked,
+        eliminarProducto: document.getElementById("permLPEliminar").checked,
+        modificarStock:   document.getElementById("permLPStock").checked,
+        cargarTexto:      document.getElementById("permLPCargarTexto").checked
       }
     },
-    // NUEVO: permiso de ingreso de productos (menú padre)
     ingresoProductos: document.getElementById("permIngresoProductosUser").checked,
-    ventasGenerales: true,
-    historialVentas: true,
-    preventas: true,
-    empleados: document.getElementById("permEmpleadosUser")?.checked || false,
-    entradas: document.getElementById("permEntradasUser").checked,
-    movimientos: document.getElementById("permMovimientosUser").checked,
-    salidas: document.getElementById("permSalidasUser").checked,
-    usuarios: document.getElementById("permUsuariosUser").checked,
-    tiendas: document.getElementById("permTiendasUser").checked
+    ventasGenerales:  true,
+    historialVentas:  true,
+    preventas:        true,
+    empleados:        document.getElementById("permEmpleadosUser")?.checked || false,
+    entradas:         document.getElementById("permEntradasUser").checked,
+    movimientos:      document.getElementById("permMovimientosUser").checked,
+    salidas:          document.getElementById("permSalidasUser").checked,
+    usuarios:         document.getElementById("permUsuariosUser").checked,
+    tiendas:          document.getElementById("permTiendasUser").checked
   };
 
   if (!username || !password) {

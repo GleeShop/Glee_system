@@ -27,9 +27,7 @@ const loggedUser      = localStorage.getItem("loggedUser") || "";
 const loggedUserRole  = localStorage.getItem("loggedUserRole") || "";
 const loggedUserStore = localStorage.getItem("loggedUserStore") || "DefaultStore";
 
-// Definición de permisos según rol:
-// - Admin: todos los botones.
-// - Usuarios con tienda: solo el botón de Crear Producto.
+// Definición de permisos según rol
 let userPermissions = {
   crearProducto: false,
   editarProducto: false,
@@ -37,23 +35,33 @@ let userPermissions = {
   modificarStock: false,
   cargarTexto: false
 };
-
-if (loggedUserRole.toLowerCase() === "admin") {
+const role = loggedUserRole.toLowerCase();
+if (role === "admin") {
+  // Admin: todos los botones
   userPermissions = {
-    crearProducto: true,
-    editarProducto: true,
+    crearProducto:    true,
+    editarProducto:   true,
     eliminarProducto: true,
-    modificarStock: true,
-    cargarTexto: true
+    modificarStock:   true,
+    cargarTexto:      true
+  };
+} else if (role === "bodega") {
+  // Bodega: crear, editar, eliminar y modificarStock
+  userPermissions = {
+    crearProducto:    true,
+    editarProducto:   true,
+    eliminarProducto: true,
+    modificarStock:   true,
+    cargarTexto:      false
   };
 } else {
-  // Para usuarios con tienda, solo se habilita "crearProducto"
+  // Cualquier otro usuario de “tienda”: solo crearProducto
   userPermissions = {
-    crearProducto: true,
-    editarProducto: false,
+    crearProducto:    true,
+    editarProducto:   false,
     eliminarProducto: false,
-    modificarStock: false,
-    cargarTexto: false
+    modificarStock:   false,
+    cargarTexto:      false
   };
 }
 console.log("Permisos de productos:", userPermissions);
@@ -150,7 +158,11 @@ function renderProducts() {
     const codigo = prod.codigo?.toLowerCase() || "";
     const descripcion = prod.descripcion?.toLowerCase() || "";
     const talla = prod.talla?.toLowerCase() || "";
-    return codigo.includes(searchQuery) || descripcion.includes(searchQuery) || talla.includes(searchQuery);
+    return (
+      codigo.includes(searchQuery) ||
+      descripcion.includes(searchQuery) ||
+      talla.includes(searchQuery)
+    );
   });
 
   if (filteredProducts.length === 0) {
@@ -619,25 +631,39 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnModificarStock = document.getElementById("btnModificarStock");
   const btnCargarTexto = document.getElementById("btnCargarTexto");
 
-  // Solo admin tiene todos los botones; usuarios con tienda solo verán "Crear Producto"
-  if (loggedUserRole.toLowerCase() === "admin") {
+  // Mostrar botones según permisos
+  if (userPermissions.crearProducto) {
     btnCrearProducto.style.display = "inline-block";
-    btnEditarProducto.style.display = "inline-block";
-    btnEliminarProducto.style.display = "inline-block";
-    btnModificarStock.style.display = "inline-block";
-    btnCargarTexto.style.display = "inline-block";
     btnCrearProducto.addEventListener("click", crearProducto);
+  } else {
+    btnCrearProducto.style.display = "none";
+  }
+
+  if (userPermissions.editarProducto) {
+    btnEditarProducto.style.display = "inline-block";
     btnEditarProducto.addEventListener("click", editarProducto);
+  } else {
+    btnEditarProducto.style.display = "none";
+  }
+
+  if (userPermissions.eliminarProducto) {
+    btnEliminarProducto.style.display = "inline-block";
     btnEliminarProducto.addEventListener("click", eliminarProducto);
+  } else {
+    btnEliminarProducto.style.display = "none";
+  }
+
+  if (userPermissions.modificarStock) {
+    btnModificarStock.style.display = "inline-block";
     btnModificarStock.addEventListener("click", modificarStock);
+  } else {
+    btnModificarStock.style.display = "none";
+  }
+
+  if (userPermissions.cargarTexto) {
+    btnCargarTexto.style.display = "inline-block";
     btnCargarTexto.addEventListener("click", cargarConCadenaTexto);
   } else {
-    // Para usuarios con tienda, solo se muestra "Crear Producto"
-    btnCrearProducto.style.display = "inline-block";
-    btnEditarProducto.style.display = "none";
-    btnEliminarProducto.style.display = "none";
-    btnModificarStock.style.display = "none";
     btnCargarTexto.style.display = "none";
-    btnCrearProducto.addEventListener("click", crearProducto);
   }
 });
