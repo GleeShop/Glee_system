@@ -47,7 +47,7 @@ function populateAdminFilters() {
   dSel.onchange = loadPendingTransfers;
 }
 
-/** 3) Get stock for product in the selected origin store */
+/** 3) Get stock for product in origin */
 function getStockForProduct(p) {
   const origin = document.getElementById("transferOrigin")?.value || loggedUserStore;
   return p.stock?.[origin] || 0;
@@ -60,10 +60,10 @@ async function loadMyTransfers() {
   if (loggedUserRole.toLowerCase() === "admin") {
     const of = document.getElementById("storeSelectOrigin").value;
     q = of
-      ? query(ref, where("origin","==",of), orderBy("date","desc"))
-      : query(ref, orderBy("date","desc"));
+      ? query(ref, where("origin", "==", of), orderBy("date", "desc"))
+      : query(ref, orderBy("date", "desc"));
   } else {
-    q = query(ref, where("pedidoPor","==",loggedUser), orderBy("date","desc"));
+    q = query(ref, where("pedidoPor", "==", loggedUser), orderBy("date", "desc"));
   }
   const snap = await getDocs(q);
   const tbody = document.querySelector("#myTransfersTable tbody");
@@ -75,14 +75,19 @@ async function loadMyTransfers() {
     r.insertCell().textContent = t.origin;
     r.insertCell().textContent = t.destination;
     r.insertCell().textContent = t.date?.toDate?.().toLocaleString() || "";
-    r.insertCell().textContent = (t.status||"ACTIVO").toUpperCase();
+    r.insertCell().textContent = (t.status || "ACTIVO").toUpperCase();
     const ac = r.insertCell();
     ac.innerHTML = t.status === "pendiente"
-      ? `<button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
-         <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
-         <button class="btn btn-sm btn-danger" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>`
-      : `<button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
-         <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>`;
+      ? `
+        <button class="btn btn-sm btn-primary me-1" onclick="editTransfer('${docSnap.id}')">Editar</button>
+        <button class="btn btn-sm btn-warning me-1" onclick="annulTransfer('${docSnap.id}')">Anular</button>
+        <button class="btn btn-sm btn-danger me-1" onclick="deleteTransfer('${docSnap.id}')">Eliminar</button>
+        <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>
+      `
+      : `
+        <button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
+        <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>
+      `;
   });
 }
 
@@ -94,12 +99,10 @@ async function loadPendingTransfers() {
     const dest = document.getElementById("storeSelectDestination").value;
     q = dest
       ? query(ref,
-          where("destination","==",dest),
-          where("status","==","pendiente"),
-          orderBy("date","desc"))
-      : query(ref,
-          where("status","==","pendiente"),
-          orderBy("date","desc"));
+          where("destination", "==", dest),
+          where("status", "==", "pendiente"),
+          orderBy("date", "desc"))
+      : query(ref, where("status","==","pendiente"), orderBy("date","desc"));
   } else {
     q = query(ref,
       where("destination","==",loggedUserStore),
@@ -112,23 +115,21 @@ async function loadPendingTransfers() {
   snap.docs.forEach(docSnap => {
     const t = docSnap.data();
     const r = tbody.insertRow();
+    const totalQty = (t.products || []).reduce((sum, it) => sum + it.quantity, 0);
     r.insertCell().textContent = docSnap.id.slice(0,6);
     r.insertCell().textContent = t.date?.toDate?.().toLocaleString() || "";
-    let ph = "", qh = "";
-    t.products?.forEach(it => {
-      ph += it.productId + "<br>";
-      qh += it.quantity  + "<br>";
-    });
-    r.insertCell().innerHTML = ph;
-    r.insertCell().innerHTML = qh;
+    r.insertCell().textContent = totalQty;
     r.insertCell().textContent = t.pedidoPor || "-";
     r.insertCell().textContent = "—";
     const ac = r.insertCell();
-    ac.innerHTML = `<button class="btn btn-sm btn-info" onclick="showValidationDetail('${docSnap.id}')">Ver</button>`;
+    ac.innerHTML = `
+      <button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
+      <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>
+    `;
   });
 }
 
-/** 6) Load "Recibidos" history */
+/** 6) Load "Recibidos" */
 async function loadReceivedTransfers() {
   const ref = collection(db, "traslados");
   let q;
@@ -151,12 +152,14 @@ async function loadReceivedTransfers() {
     r.insertCell().textContent = t.destination;
     r.insertCell().textContent = t.dateValidation?.toDate?.().toLocaleString() || "";
     const ac = r.insertCell();
-    ac.innerHTML = `<button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
-                    <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>`;
+    ac.innerHTML = `
+      <button class="btn btn-sm btn-info me-1" onclick="showValidationDetail('${docSnap.id}')">Ver</button>
+      <button class="btn btn-sm btn-success" onclick="downloadConstancia('${docSnap.id}')">Constancia</button>
+    `;
   });
 }
 
-/** 7) Show detail, toggle validate button */
+/** 7) Show detail modal */
 async function showValidationDetail(id) {
   const modalEl = document.getElementById("viewTransferModal");
   modalEl.dataset.id = id;
@@ -198,7 +201,6 @@ async function validateTransfer() {
     confirmButtonText: "Sí"
   });
   if (!res.isConfirmed) return;
-
   const ref = doc(db,"traslados",id);
   const snap = await getDoc(ref);
   if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
@@ -207,7 +209,7 @@ async function validateTransfer() {
     const pRef = doc(db,"productos",it.productId);
     await updateDoc(pRef, {
       [`stock.${t.origin}`]:      increment(-it.quantity),
-      [`stock.${t.destination}`]: increment( it.quantity)
+      [`stock.${t.destination}`]: increment(it.quantity)
     });
   }
   await updateDoc(ref, {
@@ -221,18 +223,17 @@ async function validateTransfer() {
   loadReceivedTransfers();
 }
 
-/** 9) Show new/edit form with static backdrop/keyboard=false */
+/** 9) Show transfer form */
 async function showTransferForm() {
   document.getElementById("transferForm").reset();
   selectedProducts = [];
   updateSelectedProductsDisplay();
   await loadAllStores();
   await setOriginStore();
-  const modal = new bootstrap.Modal(
+  new bootstrap.Modal(
     document.getElementById("transferModal"),
     { backdrop: 'static', keyboard: false }
-  );
-  modal.show();
+  ).show();
 }
 
 /** 10) Edit transfer */
@@ -251,11 +252,10 @@ async function editTransfer(id) {
   await setOriginStore();
   populateDestinationSelect(t.origin);
   document.getElementById("transferDestination").value = t.destination;
-  const modal = new bootstrap.Modal(
+  new bootstrap.Modal(
     document.getElementById("transferModal"),
     { backdrop: 'static', keyboard: false }
-  );
-  modal.show();
+  ).show();
 }
 
 /** 11) Delete transfer */
@@ -292,8 +292,7 @@ document.getElementById("transferForm").addEventListener("submit", async e => {
   const origin      = document.getElementById("transferOrigin")?.value || "";
   const destination = document.getElementById("transferDestination").value;
   const sender      = document.getElementById("transferSender").value.trim();
-  const comments    = document.getElementById("transferComments").value;
-  if (!origin||!destination||!sender||!selectedProducts.length) {
+  if (!origin || !destination || !sender || !selectedProducts.length) {
     return Swal.fire("Error","Complete todos los campos","error");
   }
   if (origin === destination) {
@@ -312,7 +311,7 @@ document.getElementById("transferForm").addEventListener("submit", async e => {
     origin,
     destination,
     sender,
-    comments,
+    comments: document.getElementById("transferComments").value,
     pedidoPor: loggedUser||"unknown",
     date: serverTimestamp(),
     status: "pendiente"
@@ -327,14 +326,9 @@ document.getElementById("transferForm").addEventListener("submit", async e => {
     await updateDoc(doc(db,"traslados",tid), data);
     Swal.fire("Éxito","Traslado actualizado","success");
   }
-
-  // hide and reset form
-  const modal = bootstrap.Modal.getInstance(document.getElementById("transferModal"));
-  modal.hide();
-  document.getElementById("transferForm").reset();
+  bootstrap.Modal.getInstance(document.getElementById("transferModal")).hide();
   selectedProducts = [];
   updateSelectedProductsDisplay();
-
   loadMyTransfers();
   loadPendingTransfers();
 });
@@ -342,26 +336,30 @@ document.getElementById("transferForm").addEventListener("submit", async e => {
 /** 14) Set origin store */
 async function setOriginStore() {
   const snapU = await getDocs(query(collection(db,"usuarios"), where("username","==",loggedUser)));
-  const u = snapU.docs[0].data();
-  if (loggedUserRole.toLowerCase()==="admin") {
-    let html = `
-      <div class="col-md-6 mb-3">
-        <label class="form-label">Tienda Origen</label>
-        <select id="transferOrigin" class="form-select" required>
-          <option value="">Seleccione origen</option>`;
-    allStores.forEach(n => html += `<option value="${n}">${n}</option>`);
-    html += `</select></div>`;
-    document.getElementById("originStoreContainer").innerHTML = html;
-    document.getElementById("transferOrigin")
-      .addEventListener("change", () => populateDestinationSelect(document.getElementById("transferOrigin").value));
-    populateDestinationSelect("");
-  } else {
-    document.getElementById("originStoreContainer").innerHTML = `
-      <div class="col-md-6 mb-3">
-        <label class="form-label">Tienda Origen</label>
-        <input id="transferOrigin" class="form-control" value="${u.tienda}" readonly/>
-      </div>`;
-    populateDestinationSelect(u.tienda);
+  if (!snapU.empty) {
+    const u = snapU.docs[0].data();
+    if (loggedUserRole.toLowerCase()==="admin") {
+      let html = `
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Tienda Origen</label>
+          <select id="transferOrigin" class="form-select" required>
+            <option value="">Seleccione origen</option>`;
+      allStores.forEach(n => html += `<option value="${n}">${n}</option>`);
+      html += `</select></div>`;
+      document.getElementById("originStoreContainer").innerHTML = html;
+      document.getElementById("transferOrigin")
+        .addEventListener("change", () =>
+          populateDestinationSelect(document.getElementById("transferOrigin").value)
+        );
+      populateDestinationSelect("");
+    } else {
+      document.getElementById("originStoreContainer").innerHTML = `
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Tienda Origen</label>
+          <input id="transferOrigin" class="form-control" value="${u.tienda}" readonly/>
+        </div>`;
+      populateDestinationSelect(u.tienda);
+    }
   }
 }
 
@@ -380,11 +378,10 @@ function populateDestinationSelect(origin) {
 
 /** 16) Open product search modal */
 function openProductSearchModal() {
-  const modalEl = document.getElementById("productSearchModal");
-  new bootstrap.Modal(modalEl).show();
+  new bootstrap.Modal(document.getElementById("productSearchModal")).show();
 }
 
-/** 17) Initialize product search on shown */
+/** 17) Initialize product search */
 document.getElementById("productSearchModal").addEventListener("shown.bs.modal", async () => {
   const snap = await getDocs(query(collection(db,"productos"), orderBy("descripcion")));
   const data = snap.docs.map(d => {
@@ -404,39 +401,28 @@ document.getElementById("productSearchModal").addEventListener("shown.bs.modal",
     $("#productSearchTable tbody").off();
   }
   productTable = $("#productSearchTable").DataTable({
-    data,
+    data, pageLength: 5, lengthChange: false,
     columns: [
-      { data:"codigo" },
-      { data:"descripcion" },
-      { data:"color" },
-      { data:"talla" },
-      { data:"precio" },
-      { data:"stock" },
-      {
-        data: null,
-        defaultContent: `<button class="btn btn-sm btn-primary">Agregar</button>`,
-        orderable: false
-      }
+      { data:"codigo" }, { data:"descripcion" },
+      { data:"color" }, { data:"talla" },
+      { data:"precio" },  { data:"stock" },
+      { data:null, defaultContent:`<button class="btn btn-sm btn-primary">Agregar</button>`, orderable:false }
     ],
-    pageLength: 5,
-    lengthChange: false,
     language: {
-      search: "Buscar:",
-      paginate: { first:"Primero", previous:"Anterior", next:"Siguiente", last:"Último" },
-      info: "Mostrando _START_ a _END_ de _TOTAL_ productos",
-      infoEmpty: "Mostrando 0 productos",
-      zeroRecords: "No hay productos"
+      search:"Buscar:",
+      paginate:{first:"Primero", previous:"Anterior", next:"Siguiente", last:"Último"},
+      info:"Mostrando _START_ a _END_ de _TOTAL_ productos",
+      infoEmpty:"Mostrando 0 productos",
+      zeroRecords:"No hay productos"
     }
   });
-
-  $("#productSearchTable tbody").on("click", "button", function() {
+  $("#productSearchTable tbody").on("click","button",function(){
     const row = productTable.row($(this).parents('tr')).data();
-    if (selectedProducts.some(x => x.productId === row.id)) {
+    if (selectedProducts.some(x=>x.productId===row.id)) {
       return Swal.fire("Aviso","Producto ya agregado","info");
     }
-    selectedProducts.push({ productId: row.id, quantity: 1 });
+    selectedProducts.push({productId:row.id,quantity:1});
     updateSelectedProductsDisplay();
-    // hide only the product search modal
     bootstrap.Modal.getInstance(document.getElementById("productSearchModal")).hide();
   });
 });
@@ -465,7 +451,7 @@ function updateSelectedProductsDisplay() {
         <td>
           <button class="btn btn-sm btn-danger" onclick="removeSelectedProduct(${i})">Eliminar</button>
         </td>`;
-      tbody.append(tr);
+      tbody.appendChild(tr);
     });
   });
 }
@@ -483,55 +469,81 @@ function removeSelectedProduct(idx) {
   updateSelectedProductsDisplay();
 }
 
-/** 21) Download constancia */
+/** 21) Download constancia as PDF with table formatting and margins **/
 async function downloadConstancia(id) {
   const snap = await getDoc(doc(db,"traslados",id));
-  if (!snap.exists()) return Swal.fire("Error","No encontrado","error");
+  if (!snap.exists()) return Swal.fire("Error","Traslado no encontrado","error");
   const t = snap.data();
   const date = t.dateValidation?.toDate?.() || t.date?.toDate?.() || new Date();
+
+  // Build container with inline styles
   const container = document.createElement("div");
-  container.style.background = "#fff";
-  container.style.padding = "20px";
-  container.style.width = "800px";
-  const logo = document.getElementById("constanciaLogo").src;
   container.innerHTML = `
-    <img src="${logo}" style="width:150px;"/>
-    <h3>Constancia de Recibido</h3>
-    <p><strong>Tienda Origen:</strong> ${t.origin}</p>
-    <p><strong>Enviado a:</strong> ${t.destination}</p>
-    <p><strong>Enviado por:</strong> ${t.sender}</p>
-    <p><strong>Fecha de recepción:</strong> ${date.toLocaleString()}</p>
-    <p><strong>Estado:</strong> ${t.status.toUpperCase()}</p>
-    <table style="width:100%;border-collapse:collapse;" border="1">
-      <thead><tr>
-        <th>Código</th><th>Descripción</th><th>Talla</th>
-        <th>Color</th><th>Precio</th><th>Cantidad</th>
-      </tr></thead>
-      <tbody>
-        ${await Promise.all(t.products.map(async it => {
-          const pSnap = await getDoc(doc(db,"productos",it.productId));
-          const p = pSnap.data();
-          return `<tr>
-            <td>${p.codigo}</td>
-            <td>${p.descripcion}</td>
-            <td>${p.talla||""}</td>
-            <td>${p.color||""}</td>
-            <td>${p.precio!=null? p.precio.toFixed(2):""}</td>
-            <td>${it.quantity}</td>
-          </tr>`;
-        })).then(rows => rows.join(""))}
-      </tbody>
-    </table>`;
+    <div style="margin:20pt;">
+      <div style="text-align:center;">
+        <img src="${document.getElementById("constanciaLogo").src}" style="width:150px;"/>
+        <h3>Constancia de Recibido</h3>
+      </div>
+      <p><strong>Tienda Origen:</strong> ${t.origin}</p>
+      <p><strong>Enviado a:</strong> ${t.destination}</p>
+      <p><strong>Enviado por:</strong> ${t.sender}</p>
+      <p><strong>Fecha de recepción:</strong> ${date.toLocaleString()}</p>
+      <p><strong>Estado:</strong> ${t.status.toUpperCase()}</p>
+      <table style="border-collapse:collapse; width:100%; margin-top:10px;">
+        <thead>
+          <tr>
+            <th style="border:1px solid #000; padding:5px;">Código</th>
+            <th style="border:1px solid #000; padding:5px;">Descripción</th>
+            <th style="border:1px solid #000; padding:5px;">Talla</th>
+            <th style="border:1px solid #000; padding:5px;">Color</th>
+            <th style="border:1px solid #000; padding:5px;">Precio</th>
+            <th style="border:1px solid #000; padding:5px;">Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${await Promise.all(t.products.map(async it => {
+            const pSnap = await getDoc(doc(db,"productos",it.productId));
+            if (!pSnap.exists()) {
+              return `<tr>
+                <td style="border:1px solid #000; padding:5px;">--</td>
+                <td style="border:1px solid #000; padding:5px;">Producto no encontrado</td>
+                <td style="border:1px solid #000; padding:5px;">--</td>
+                <td style="border:1px solid #000; padding:5px;">--</td>
+                <td style="border:1px solid #000; padding:5px;">--</td>
+                <td style="border:1px solid #000; padding:5px;">${it.quantity}</td>
+              </tr>`;
+            }
+            const p = pSnap.data();
+            return `<tr>
+              <td style="border:1px solid #000; padding:5px;">${p.codigo||"--"}</td>
+              <td style="border:1px solid #000; padding:5px;">${p.descripcion||"--"}</td>
+              <td style="border:1px solid #000; padding:5px;">${p.talla||"--"}</td>
+              <td style="border:1px solid #000; padding:5px;">${p.color||"--"}</td>
+              <td style="border:1px solid #000; padding:5px;">${p.precio!=null? p.precio.toFixed(2):"--"}</td>
+              <td style="border:1px solid #000; padding:5px;">${it.quantity}</td>
+            </tr>`;
+          })).then(rows => rows.join(""))}
+        </tbody>
+      </table>
+    </div>`;
   document.body.appendChild(container);
-  const canvas = await html2canvas(container);
-  const link = document.createElement("a");
-  link.href = canvas.toDataURL("image/png");
-  link.download = `recibido_${id}.png`;
-  link.click();
-  document.body.removeChild(container);
+
+  // Generate PDF (html() respects page-break rules)
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit:"pt", format:"a4" });
+  await pdf.html(container, {
+    callback: doc => {
+      doc.save(`recibido_${id}.pdf`);
+      document.body.removeChild(container);
+    },
+    x: 0,
+    y: 0,
+    html2canvas: { scale: 0.75 },
+    width: pdf.internal.pageSize.getWidth()
+  });
 }
 
-/** 22) Init on load */
+/** 22) Init */
 document.addEventListener("DOMContentLoaded", async () => {
   await loadAllStores();
   populateAdminFilters();
@@ -540,7 +552,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadReceivedTransfers();
 });
 
-// Expose for HTML onclicks
+// Expose functions for HTML
 window.showTransferForm       = showTransferForm;
 window.editTransfer           = editTransfer;
 window.validateTransfer       = validateTransfer;
